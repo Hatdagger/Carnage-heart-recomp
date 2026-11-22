@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=CarnageHeart
+Exec=CarnageHeart_Recompiled
+Icon=carnageheart
+Categories=Game;
+Terminal=false

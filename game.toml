@@ -1,0 +1,54 @@
+# Autofilled by tools/new_project_layout/probe_disc.py from your legal dump.
+# Review before shipping. Runtime quirks / overlay seeds still need hand work.
+
+[game]
+name = "CarnageHeart"
+id = "SCUS-94604"
+players = 2
+exe = "disc/SCUS_946.04"
+disc = "disc/Carnage Heart (USA).cue"  # set to your own Redump .cue
+load_address = "0x80010000"
+entry_pc = "0x8008DF38"
+text_size = "0x000D0000"
+stack_base = "0x801FFFF0"
+
+# Digests are for data Track 01 (first BINARY FILE / TRACK 01).
+[prepare_disc]
+out_dir = "disc"
+bin_name = "Carnage Heart (USA) (Track 1).bin"
+cue_name = "Carnage Heart (USA).cue"
+boot_exe = "SCUS_946.04"
+known_sizes = [58028544]
+known_md5 = [
+  "6830aa39ea95f4c380f8a3f49136fee7",
+]
+known_sha1 = [
+  "e0c72b09fa0b4d29d6972b1fccb7f28ba11e8fc1",
+]
+known_crc32 = [
+  "346ba839",
+]
+
+[recompiler]
+seeds = "seeds/ghidra_funcs.txt"
+out_dir = "generated"
+strict = true
+
+[runtime]
+window_title = "CarnageHeart Recompiled"
+memcard_dir = "saves"
+overlay_cache = true
+
+[video]
+renderer = "opengl"
+aspect_ratio = "4:3"
+
+[controller]
+default_mode = "digital"
+
+# Online mount gate: digests + track count + optional TOC fingerprint
+# (see docs/NETPLAY.md).
+[netplay]
+require_cue = true
+required_tracks = 3
+required_disc_fp = "e6cb5675de8571e519df3affef5783103a5b08e16c972f91eac124aa4495bd27"

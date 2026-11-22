@@ -17,3 +17,6 @@ typedef struct ChPointerFrame {
 int  ch_pointer_enabled(void);
 /* Once per game PadRead, on the main thread. */
 void ch_pointer_frame(ChPointerFrame *out);
+/* Once per game PadRead, before ch_pointer_frame: return address of the menu
+ * screen on show (see src/screen_labels.c), 0 when none is. */
+void ch_pointer_set_screen(uint32_t ra);

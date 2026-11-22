@@ -107,9 +107,10 @@ psxrecomp_select_guest_implementation(
     NAME ch_mouse IMPLEMENTATION ${CH_MOUSE_IMPL}
     TARGETS ${_ch_mouse_targets}
     GENERATED_SOURCES ${_ch_game_shards}
-    SYMBOLS func_8003E154 func_8003E89C
+    SYMBOLS func_8003E154 func_8003E89C func_8003EEC4
     HLE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/mouse_pad_hle.c"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/pointer_menu.c"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/screen_labels.c"
     REFERENCE_PREFIX ch_mouse_lle_
     SNAPSHOT_TAG 0x43484D31)
 endif()

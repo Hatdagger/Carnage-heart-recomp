@@ -35,6 +35,11 @@ This repository contains **no game data and no recompiled game code**. You gener
 | Right click / long press | Opens a small labelled menu at the pointer: Triangle, Square, Start, Select, L1, R1, L2, R2, Back. Pick one to press it on the item you right-clicked; click anywhere else to close |
 | Double right click / two-finger tap | Circle (back) |
 
+<p align="center">
+  <img src="docs/screenshots/right-click-menu-title.png" alt="Right-click menu open over the title screen" width="400">
+  <img src="docs/screenshots/right-click-menu-closeup.png" alt="Close-up of the right-click menu with Back highlighted" width="240">
+</p>
+
 Pointer mode is off during netplay. Set `CH_POINTER=0` to turn it off.
 
 ## Play on Windows (setup kit)

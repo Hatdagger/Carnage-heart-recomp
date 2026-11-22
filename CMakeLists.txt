@@ -113,6 +113,20 @@ psxrecomp_select_guest_implementation(
     REFERENCE_PREFIX ch_mouse_lle_
     SNAPSHOT_TAG 0x43484D31)
 endif()
+# Research experiment (off by default): fight campaign battles as VS-mode
+# battles so side 2 uses player designs. Run with CH_SIDE2_PLAYER=1.
+# See docs/research/VS_MODE_AND_SAVES.md.
+option(CH_SIDE2_TEST "Campaign battle as VS battle experiment" OFF)
+if(CH_SIDE2_TEST AND _ch_game_shards AND NOT PSXRECOMP_FORCE_SETUP_HOST)
+psxrecomp_select_guest_implementation(
+    NAME ch_side2 IMPLEMENTATION HLE
+    TARGETS ${_ch_mouse_targets}
+    GENERATED_SOURCES ${_ch_game_shards}
+    SYMBOLS func_8001CF48
+    HLE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/side2_cards_test.c"
+    REFERENCE_PREFIX ch_side2_lle_
+    SNAPSHOT_TAG 0x43485332)
+endif()
 # Test-only: -DCH_MOUSE_SELFTEST=ON drives a fake mouse from a file (see src/mouse_pad_hle.c).
 option(CH_MOUSE_SELFTEST "Fake PS1 Mouse from CH_MOUSE_SELFTEST_FILE (testing only)" OFF)
 if(CH_MOUSE_SELFTEST)

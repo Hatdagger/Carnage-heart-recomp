@@ -147,7 +147,12 @@ jobs:
             grep -q "^${must}" <<<"${LIST}" || { echo "::error::kit lacks ${must}"; exit 1; }
           done
           # Never ship game data, BIOS dumps or recompiled game code.
-          if grep -iE '\.(cue|iso|img|chd|mcd|mcr)$|(^|/)SCPH|^generated/' <<<"${LIST}"; then
+          # (BIOS profile .toml files and the framework's synthetic test
+          # fixtures under */tests/ are fine.)
+          BAD="$(grep -iE '\.(cue|iso|img|chd|mcd|mcr|bin)$|^generated/' <<<"${LIST}" \
+                 | grep -vE '/tests/' | grep -vE '(^|/)bios/openbios\.bin$' || true)"
+          if [[ -n "${BAD}" ]]; then
+            echo "${BAD}"
             echo "::error::kit contains disc/BIOS/save data or generated game C"; exit 1
           fi
 

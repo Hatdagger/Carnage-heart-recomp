@@ -18,20 +18,36 @@
  * Hints, checked in the sandbox:
  *   H_QUIT      Select opens the Quit Game / Cancel box (0x8001B0C0);
  *   H_NEXTBASE  L2 steps to your next base (0x800DF404 over 0x800E0154);
- *   H_NEXTUNIT  L2 steps to your next unit (0x800DF408 over 0x800E017C). */
+ *   H_NEXTUNIT  L2 steps to your next unit (0x800DF408 over 0x800E017C);
+ *   H_CHIPS     R2 opens the chip list (0x8004591C) on the chip program grid
+ *               (screen 0x80041188; its helper 0x80047948 also scrolls the
+ *               grid while R1 is held, which the on-screen arrows do too);
+ *   H_BATTLE    a battle (no hotspots; the pad code notes the battle viewer
+ *               0x8001FB04 and the buttons are read by 0x800220F4):
+ *               L2 = camera to the next OKE, Select = display settings
+ *               (0x80023F54 / 0x80024564), Start = every OKE's status in a
+ *               test battle, next OKE otherwise; with two players watching
+ *               L2 and Start don't switch OKE. In mouse mode (0x800DF358 = 1,
+ *               always so while the pointer is in use) the game ignores
+ *               Select and Start there and takes Circle and Cross instead, as
+ *               in EZ: so the menu entries press those. */
 #include "screen_labels.h"
 
 #define B_L2     0x0001u
+#define B_R2     0x0002u
 #define B_SELECT 0x0100u
 #define B_START  0x0800u
 #define B_TRI    0x0010u
+#define B_CIRCLE 0x0020u
+#define B_CROSS  0x0040u
 
-enum { H_QUIT = 1, H_NEXTBASE = 2, H_NEXTUNIT = 4 };
+enum { H_QUIT = 1, H_NEXTBASE = 2, H_NEXTUNIT = 4, H_CHIPS = 8, H_BATTLE = 16 };
 
 typedef struct { uint32_t start, end; uint16_t bits; uint8_t hints; } Screen;
 
 static const Screen k_screens[] = {
     { 0x8001B0C0u, 0x8001B4CCu, 0x000u, 0 },
+    { 0x8001FB04u, 0x8001FB08u, 0x901u, H_BATTLE },
     { 0x80023F54u, 0x80024564u, 0x100u, 0 },
     { 0x80024564u, 0x80024A7Cu, 0x100u, 0 },
     { 0x80024DE4u, 0x80025204u, 0x000u, 0 },
@@ -44,7 +60,7 @@ static const Screen k_screens[] = {
     { 0x8003B8A4u, 0x8003BC80u, 0x100u, H_QUIT },
     { 0x8003BC80u, 0x8003C350u, 0x100u, H_QUIT },
     { 0x8003C6D4u, 0x8003D218u, 0x100u, H_QUIT },
-    { 0x80041188u, 0x800415DCu, 0x100u, H_QUIT },
+    { 0x80041188u, 0x800415DCu, 0x102u, H_QUIT|H_CHIPS },
     { 0x800426FCu, 0x80042A40u, 0x100u, 0 },
     { 0x80042FF0u, 0x800433E0u, 0x100u, H_QUIT },
     { 0x800440F0u, 0x80044300u, 0x100u, H_QUIT },
@@ -106,6 +122,9 @@ static const Screen k_screens[] = {
 };
 #define N_SCREENS ((int)(sizeof k_screens / sizeof k_screens[0]))
 
+static volatile int s_battle_mode, s_battle_pads;
+void ch_screen_set_battle(int mode, int pads) { s_battle_mode = mode; s_battle_pads = pads; }
+
 int ch_screen_items(uint32_t ra, ChScreenItem *out, int max) {
     int lo = 0, hi = N_SCREENS - 1;
     const Screen *s = 0;
@@ -117,6 +136,16 @@ int ch_screen_items(uint32_t ra, ChScreenItem *out, int max) {
     }
     if (!s) return -1;
     int n = 0;
+    if (s->hints & H_BATTLE) {
+        const int one = s_battle_pads < 2;   /* a single player watching */
+        if (one && n < max) out[n++] = (ChScreenItem){ "L2: NEXT OKE", B_L2 };
+        if (n < max) out[n++] = (ChScreenItem){ "SETTINGS", B_CIRCLE };
+        if (s_battle_mode == 0 && n < max) out[n++] = (ChScreenItem){ "OKE STATUS", B_CROSS };
+        else if (one && n < max)           out[n++] = (ChScreenItem){ "NEXT OKE", B_CROSS };
+        return n;
+    }
+    if ((s->bits & B_R2) && n < max)
+        out[n++] = (ChScreenItem){ (s->hints & H_CHIPS) ? "R2: CHIP LIST" : "R2", B_R2 };
     if ((s->bits & B_SELECT) && n < max)
         out[n++] = (ChScreenItem){ (s->hints & H_QUIT) ? "SELECT: QUIT GAME" : "SELECT", B_SELECT };
     if ((s->bits & B_L2) && n < max)

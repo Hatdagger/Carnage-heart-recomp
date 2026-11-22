@@ -32,7 +32,7 @@ This repository contains **no game data and no recompiled game code**. You gener
 |---|---|
 | Move the pointer | Moves the game's cursor (the pad takes over again as soon as you press a pad button) |
 | Left click / tap | Cross (confirm) on the item under the pointer |
-| Right click / long press | Opens a small menu at the pointer with the buttons a mouse lacks. On menu screens it lists only the buttons that do something there and says what they do (for example "SELECT: QUIT GAME", "L2: NEXT BASE"); **MORE BUTTONS** shows the full list (Triangle, Square, Start, Select, L1, R1, L2, R2). Pick one to press it on the item you right-clicked; click anywhere else to close |
+| Right click / long press | Opens a small menu at the pointer with the buttons a mouse lacks. On menu screens it lists only the buttons that do something there and says what they do (for example "SELECT: QUIT GAME", "L2: NEXT BASE", "R2: CHIP LIST" on the chip program grid, "L2: NEXT OKE" in battle); **MORE BUTTONS** shows the full list (Triangle, Square, Start, Select, L1, R1, L2, R2). Pick one to press it on the item you right-clicked; click anywhere else to close |
 | Double right click / two-finger tap | Circle (back) |
 
 <p align="center">
@@ -42,8 +42,12 @@ This repository contains **no game data and no recompiled game code**. You gener
   <img src="docs/screenshots/right-click-menu-base-closeup.png" alt="Close-up: the base screen's buttons with what they do" width="300">
   <img src="docs/screenshots/right-click-menu-more.png" alt="MORE BUTTONS expanded to every button" width="220">
 </p>
+<p align="center">
+  <img src="docs/screenshots/right-click-menu-battle.png" alt="Right-click menu in a battle: L2: Next OKE, Settings, OKE Status" width="400">
+  <img src="docs/screenshots/right-click-menu-chips.png" alt="Right-click menu on the chip program grid: R2: Chip List, Select: Quit Game" width="400">
+</p>
 
-Which buttons each menu screen uses comes from a scan of the game's code (`tools/scan_screens.py`, table in `src/screen_labels.c`). Screens that aren't hotspot menus (the map, battles) show the full list.
+Which buttons each menu screen uses comes from a scan of the game's code (`tools/scan_screens.py`, table in `src/screen_labels.c`), checked in the game. In battles the menu offers **L2: NEXT OKE** (camera to the next OKE), **SETTINGS** (display, speed and camera) and **OKE STATUS** (test battles) or **NEXT OKE** (other battles). As in *Carnage Heart EZ*, while you use the mouse a battle takes left click for OKE status / next OKE and double right click for settings, in place of Start and Select. Any other screen shows the full list.
 
 Pointer mode is off during netplay. Set `CH_POINTER=0` to turn it off.
 

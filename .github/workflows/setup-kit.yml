@@ -43,6 +43,12 @@ jobs:
       run:
         shell: ${{ matrix.shell }}
     steps:
+      # Keep LF endings on Windows: CRLF breaks the dependency pin list
+      # (psxrecomp/third_party/deps.manifest) and shell scripts.
+      - name: Disable CRLF conversion
+        shell: bash
+        run: git config --global core.autocrlf false
+
       - uses: actions/checkout@v4
         with:
           submodules: recursive

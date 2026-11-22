@@ -162,6 +162,43 @@ jobs:
           path: dist/carnageheart-setup-*-${{ matrix.artifact }}.zip
           if-no-files-found: error
 
+  # Player's first run on a clean Windows PC (no MSYS2 on PATH): unzip the kit
+  # and run the same toolchain + emitter build the setup wizard runs, so a
+  # failure shows its real compiler output here instead of "exit 1".
+  first-run-windows:
+    needs: build
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: carnageheart-setup-windows-x64
+          path: kit-zip
+      - name: Unzip kit to a short path
+        run: |
+          $zip = Get-ChildItem kit-zip -Filter *.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath C:\ch
+          Get-ChildItem C:\ch | Format-Table Name
+      - name: Toolchain + emitters (as the wizard runs them)
+        run: |
+          $root = (Get-ChildItem C:\ch -Directory | Where-Object { Test-Path "$($_.FullName)\psxrecomp\psxrecomp_cli.py" } | Select-Object -First 1).FullName
+          if (-not $root) { $root = 'C:\ch' }
+          Write-Host "kit root: $root"
+          $env:PATH = "C:\Windows\System32;C:\Windows;$((Get-Command python).Source | Split-Path)"
+          Set-Location $root
+          python psxrecomp\psxrecomp_cli.py ensure-toolchain --project-root $root
+          if ($LASTEXITCODE -ne 0) { throw "ensure-toolchain failed ($LASTEXITCODE)" }
+          python psxrecomp\psxrecomp_cli.py ensure-emitters --project-root $root 2>&1 | Tee-Object emitters.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Write-Host "---- error lines ----"
+            Select-String -Path emitters.log -Pattern 'error|FAILED|fatal' | Select-Object -First 40 | ForEach-Object { Write-Host $_.Line }
+            throw "ensure-emitters failed ($code)"
+          }
+          Get-ChildItem psxrecomp\recompiler\build -Filter *.exe | Format-Table Name, Length
+
   release:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true'

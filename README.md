@@ -32,13 +32,18 @@ This repository contains **no game data and no recompiled game code**. You gener
 |---|---|
 | Move the pointer | Moves the game's cursor (the pad takes over again as soon as you press a pad button) |
 | Left click / tap | Cross (confirm) on the item under the pointer |
-| Right click / long press | Opens a small labelled menu at the pointer: Triangle, Square, Start, Select, L1, R1, L2, R2, Back. Pick one to press it on the item you right-clicked; click anywhere else to close |
+| Right click / long press | Opens a small menu at the pointer with the buttons a mouse lacks. On menu screens it lists only the buttons that do something there and says what they do (for example "SELECT: QUIT GAME", "L2: NEXT BASE"); **MORE BUTTONS** shows the full list (Triangle, Square, Start, Select, L1, R1, L2, R2). Pick one to press it on the item you right-clicked; click anywhere else to close |
 | Double right click / two-finger tap | Circle (back) |
 
 <p align="center">
-  <img src="docs/screenshots/right-click-menu-title.png" alt="Right-click menu open over the title screen" width="400">
-  <img src="docs/screenshots/right-click-menu-closeup.png" alt="Close-up of the right-click menu with Back highlighted" width="240">
+  <img src="docs/screenshots/right-click-menu-base.png" alt="Right-click menu on the base screen, listing Select: Quit Game and L2: Next Base" width="400">
 </p>
+<p align="center">
+  <img src="docs/screenshots/right-click-menu-base-closeup.png" alt="Close-up: the base screen's buttons with what they do" width="300">
+  <img src="docs/screenshots/right-click-menu-more.png" alt="MORE BUTTONS expanded to every button" width="220">
+</p>
+
+Which buttons each menu screen uses comes from a scan of the game's code (`tools/scan_screens.py`, table in `src/screen_labels.c`). Screens that aren't hotspot menus (the map, battles) show the full list.
 
 Pointer mode is off during netplay. Set `CH_POINTER=0` to turn it off.
 

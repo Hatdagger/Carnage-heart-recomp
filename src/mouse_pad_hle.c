@@ -45,6 +45,12 @@ static int selftest_report(uint8_t out[6]) {
  * moves the cursor onto a box once (see func_8003E89C). */
 static int nav_resnap;
 
+/* PadRead count, and the return address of the latest HotspotNavigate /
+ * HotspotDrawHitTest call with the PadRead count it was seen at. The menu
+ * screen calling them each frame is the screen on show (src/screen_labels.c). */
+static uint32_t pad_reads, screen_ra, screen_seen;
+static void note_screen(uint32_t ra) { screen_ra = ra; screen_seen = pad_reads; }
+
 static int32_t ez_signed_x(uint8_t b) { return b < 0x81 ? (int32_t)b : -(int32_t)(uint8_t)~b; }
 static int32_t ez_signed_y(uint8_t b) { return b < 0x81 ? (int32_t)(b >> 1) : -(int32_t)((b >> 1) ^ 0x7F); }
 
@@ -53,6 +59,10 @@ void func_8003E154(CPUState *cpu)
 #ifdef CH_MOUSE_SELFTEST
     { uint8_t r[6]; if (selftest_report(r)) for (int i = 0; i < 6; ++i) cpu->write_byte(PAD1_BUF + i, r[i]); }
 #endif
+    ++pad_reads;
+    /* A screen that called the hotspot routines within the last few frames is
+     * still the one on show; otherwise it is not a hotspot menu (map, battle). */
+    ch_pointer_set_screen(pad_reads - screen_seen <= 4u ? screen_ra : 0u);
     uint8_t type = cpu->read_byte(PAD1_BUF + 1);
     uint32_t buttons = cpu->read_word(PAD_BUTTONS);
     cpu->write_word(PAD_PREV, buttons);
@@ -148,6 +158,7 @@ void func_8003E89C(CPUState *cpu)
         nav_ra = cpu->gpr[31];
         nav_x = cpu->read_word(CURSOR_X);
         nav_y = cpu->read_word(CURSOR_Y);
+        note_screen(nav_ra);
 #ifdef CH_MOUSE_SELFTEST
         if (getenv("CH_MOUSE_SELFTEST_SNAP")) nav_pending = 0; /* test: original snapping */
         { /* test: log each new hotspot table (caller, origin, boxes) */
@@ -199,4 +210,15 @@ void func_8003E89C(CPUState *cpu)
         cpu->write_word(CURSOR_Y, nav_y);
         nav_pending = 0;
     }
+}
+
+/* Hotspot draw + hit test (USA 0x8003EEC4). Unchanged; only notes which screen
+ * called it. Some screens call HotspotNavigate only while Triangle is held, but
+ * every hotspot screen calls this each frame. */
+void ch_mouse_lle_func_8003EEC4(CPUState *cpu);
+
+void func_8003EEC4(CPUState *cpu)
+{
+    if (cpu->pc == 0u || cpu->pc == 0x8003EEC4u) note_screen(cpu->gpr[31]);
+    ch_mouse_lle_func_8003EEC4(cpu);
 }

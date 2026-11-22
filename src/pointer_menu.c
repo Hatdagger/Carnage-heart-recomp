@@ -8,10 +8,14 @@
  *
  *   Left click            Cross (confirm) on the item under the pointer
  *   Right click           opens a small labelled menu at the pointer with the
- *                         buttons a mouse lacks: Triangle, Square, Start,
- *                         Select, L1, R1, L2, R2 and Back. Clicking an entry
- *                         presses that button on the item you right-clicked.
- *                         Clicking anywhere else closes the menu.
+ *                         buttons a mouse lacks. On a known menu screen it
+ *                         lists only the buttons that do something there, with
+ *                         what they do ("SELECT: QUIT GAME"), plus MORE BUTTONS
+ *                         for the full list; elsewhere it lists Triangle,
+ *                         Square, Start, Select, L1, R1, L2, R2. Back is always
+ *                         last. Clicking an entry presses that button on the
+ *                         item you right-clicked. Clicking anywhere else closes
+ *                         the menu.
  *   Double right click    Circle (back). The menu opens on the first click and
  *                         closes again on the second, so there is no delay.
  *   Touch tap             move + Cross
@@ -28,6 +32,7 @@
  * while the in-game menu owns input, and while the runtime's PS1 Mouse mode
  * has the pointer captured. CH_POINTER=0 turns it off entirely. */
 #include "pointer_menu.h"
+#include "screen_labels.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -50,23 +55,29 @@
 #define B_SELECT   0x0100u
 #define B_START    0x0800u
 
-typedef struct { const char *label; uint32_t bit; } MenuItem;
-static const MenuItem k_items[] = {
+/* kind: a button, or MORE (show every button), or BACK (Circle). */
+enum { K_BUTTON, K_MORE, K_BACK };
+typedef struct { const char *label; uint32_t bit; int kind; } MenuItem;
+static const MenuItem k_all[] = {
     { "TRIANGLE", B_TRIANGLE }, { "SQUARE", B_SQUARE },
     { "START",    B_START    }, { "SELECT", B_SELECT },
     { "L1",       B_L1       }, { "R1",     B_R1     },
     { "L2",       B_L2       }, { "R2",     B_R2     },
-    { "BACK",     B_CIRCLE   },
 };
-#define N_ITEMS ((int)(sizeof k_items / sizeof k_items[0]))
+#define N_ALL ((int)(sizeof k_all / sizeof k_all[0]))
+static const MenuItem k_more = { "MORE BUTTONS", 0, K_MORE };
+static const MenuItem k_back = { "BACK", B_CIRCLE, K_BACK };
 
-/* Menu layout in menu pixels (multiplied by the draw scale). */
+/* Menu layout in menu pixels (multiplied by the draw scale). The entries are
+ * chosen when the menu opens, so its size varies; the image buffer is sized
+ * for the largest menu. */
 #define FONT_W   8
 #define ROW_H    11
 #define PAD      3
-#define MENU_COLS 9                     /* longest label + margin */
-#define MENU_W   (PAD * 2 + MENU_COLS * FONT_W)
-#define MENU_H   (PAD * 2 + N_ITEMS * ROW_H)
+#define MAX_ITEMS 12
+#define MAX_COLS  20
+#define MAX_W    (PAD * 2 + MAX_COLS * FONT_W)
+#define MAX_H    (PAD * 2 + MAX_ITEMS * ROW_H)
 
 #define DOUBLE_CLICK_MS 350u
 #define LONG_PRESS_MS   500u
@@ -126,6 +137,9 @@ static float      s_pixel_density = 1.0f;
 static SDL_AtomicInt s_draws;
 static int        s_ww, s_wh;           /* window size, from the main thread */
 static int        s_last_draws, s_frames_since_draw;
+static uint32_t   s_screen_ra;          /* menu screen on show, 0 = none */
+static MenuItem   s_items[MAX_ITEMS];   /* entries of the open menu */
+static int        s_n_items, s_mw = MAX_W, s_mh = MAX_H; /* menu size, menu px */
 
 /* Touch */
 static SDL_FingerID s_f1; static int s_fingers, s_f1_down, s_f_drag, s_f_two, s_f_consumed;
@@ -151,20 +165,41 @@ static void game_rect(int ww, int wh, float *rx, float *ry, float *rw, float *rh
 /* Menu size in window coordinates. */
 static void menu_size(float *w, float *h) {
     float s = (float)s_menu_scale / (s_pixel_density > 0.0f ? s_pixel_density : 1.0f);
-    *w = MENU_W * s; *h = MENU_H * s;
+    *w = (float)s_mw * s; *h = (float)s_mh * s;
 }
 
 static int menu_item_at(float x, float y) {
     float w, h; menu_size(&w, &h);
     if (x < s_menu_x || y < s_menu_y || x >= s_menu_x + w || y >= s_menu_y + h) return -1;
-    float row = (y - s_menu_y) / (h / (float)MENU_H);  /* in menu pixels */
+    float row = (y - s_menu_y) / (h / (float)s_mh);    /* in menu pixels */
     int i = (int)((row - PAD) / ROW_H);
-    return (i >= 0 && i < N_ITEMS) ? i : -2;           /* -2: on the frame */
+    return (i >= 0 && i < s_n_items) ? i : -2;         /* -2: on the frame */
 }
 
-static void menu_open_at(float x, float y) {
+/* Choose the entries: the screen's own buttons with what they do, MORE
+ * BUTTONS and BACK on a known menu screen; every button and BACK elsewhere,
+ * or when all is set (MORE BUTTONS was clicked). */
+static void menu_fill(int all) {
+    int n = 0;
+    ChScreenItem sc[8];
+    const int k = (!all && s_screen_ra) ? ch_screen_items(s_screen_ra, sc, 8) : -1;
+    if (k >= 0) {
+        for (int i = 0; i < k; ++i) s_items[n++] = (MenuItem){ sc[i].label, sc[i].bit, K_BUTTON };
+        s_items[n++] = k_more;
+    } else {
+        for (int i = 0; i < N_ALL; ++i) s_items[n++] = k_all[i];
+    }
+    s_items[n++] = k_back;
+    s_n_items = n;
+    int cols = 0;
+    for (int i = 0; i < n; ++i) { int l = (int)strlen(s_items[i].label); if (l > cols) cols = l; }
+    if (cols > MAX_COLS - 1) cols = MAX_COLS - 1;
+    s_mw = PAD * 2 + (cols + 1) * FONT_W;
+    s_mh = PAD * 2 + n * ROW_H;
+}
+
+static void menu_place(float x, float y) {
     int ww = 0, wh = 0; float w, h;
-    s_anchor_x = x; s_anchor_y = y;
     menu_size(&w, &h);
     float mx = x + 2.0f, my = y + 2.0f;
     if (win_size(&ww, &wh)) {
@@ -177,13 +212,23 @@ static void menu_open_at(float x, float y) {
     s_menu_x = mx; s_menu_y = my; s_menu_open = 1;
 }
 
+static void menu_open_at(float x, float y) {
+    s_anchor_x = x; s_anchor_y = y;
+    menu_fill(0);
+    menu_place(x, y);
+}
+
 static void fire(uint32_t bit) { s_fire_bits |= bit; s_fire_frames = PRESS_FRAMES; s_activity = 1; }
 
 /* A primary press (left click or touch tap) at x, y. */
 static void primary_press(float x, float y) {
     if (s_menu_open) {
         int i = menu_item_at(x, y);
-        if (i >= 0) fire(k_items[i].bit);
+        if (i >= 0 && s_items[i].kind == K_MORE) {     /* expand in place */
+            menu_fill(1); menu_place(s_anchor_x, s_anchor_y); s_activity = 1;
+            return;
+        }
+        if (i >= 0) fire(s_items[i].bit);
         if (i != -2) s_menu_open = 0;                  /* entry or outside */
         return;
     }
@@ -342,27 +387,30 @@ static int gl_init(void) {
 
 /* RGBA image of the menu, hover row highlighted. Colours follow the game's
  * dark-blue panels. */
-static uint32_t s_img[MENU_W * MENU_H];
-static void put(int x, int y, uint32_t c) { if (x >= 0 && y >= 0 && x < MENU_W && y < MENU_H) s_img[y * MENU_W + x] = c; }
+static uint32_t s_img[MAX_W * MAX_H];
+static int s_iw, s_ih;                  /* size of the image being drawn */
+static void put(int x, int y, uint32_t c) { if (x >= 0 && y >= 0 && x < s_iw && y < s_ih) s_img[y * s_iw + x] = c; }
 #define RGBA(r, g_, b, a) ((uint32_t)(r) | ((uint32_t)(g_) << 8) | ((uint32_t)(b) << 16) | ((uint32_t)(a) << 24))
-static void render_menu(int hover) {
+static void render_menu(const MenuItem *items, int n, int w, int h, int hover) {
     const uint32_t bg = RGBA(16, 24, 56, 230), edge = RGBA(150, 170, 230, 255),
                    hi = RGBA(60, 90, 180, 255), fg = RGBA(235, 235, 245, 255), dim = RGBA(150, 160, 190, 255);
-    for (int i = 0; i < MENU_W * MENU_H; ++i) s_img[i] = bg;
-    for (int x = 0; x < MENU_W; ++x) { put(x, 0, edge); put(x, MENU_H - 1, edge); }
-    for (int y = 0; y < MENU_H; ++y) { put(0, y, edge); put(MENU_W - 1, y, edge); }
-    for (int i = 0; i < N_ITEMS; ++i) {
+    s_iw = w; s_ih = h;
+    for (int i = 0; i < w * h; ++i) s_img[i] = bg;
+    for (int x = 0; x < w; ++x) { put(x, 0, edge); put(x, h - 1, edge); }
+    for (int y = 0; y < h; ++y) { put(0, y, edge); put(w - 1, y, edge); }
+    for (int i = 0; i < n; ++i) {
         const int ry = PAD + i * ROW_H;
         if (i == hover)
-            for (int y = ry; y < ry + ROW_H; ++y) for (int x = 1; x < MENU_W - 1; ++x) put(x, y, hi);
-        if (k_items[i].bit == B_CIRCLE)                /* separator above BACK */
-            for (int x = PAD; x < MENU_W - PAD; ++x) put(x, ry - 1, dim);
-        const char *s = k_items[i].label;
-        for (int c = 0; s[c]; ++c) {
+            for (int y = ry; y < ry + ROW_H; ++y) for (int x = 1; x < w - 1; ++x) put(x, y, hi);
+        if (i > 0 && items[i].kind != K_BUTTON && items[i - 1].kind == K_BUTTON)
+            for (int x = PAD; x < w - PAD; ++x) put(x, ry - 1, dim);   /* separator */
+        const uint32_t col = items[i].kind == K_MORE ? dim : fg;
+        const char *s = items[i].label;
+        for (int c = 0; s[c] && c < MAX_COLS - 1; ++c) {
             int ch = (unsigned char)s[c]; if (ch < 32 || ch > 90) ch = '?';
             const uint8_t *gl = FONT8[ch - 32];
             for (int gy = 0; gy < 8; ++gy) for (int gx = 0; gx < 8; ++gx)
-                if (gl[gy] & (1u << gx)) put(PAD + 2 + c * FONT_W + gx, ry + 2 + gy, fg);
+                if (gl[gy] & (1u << gx)) put(PAD + 2 + c * FONT_W + gx, ry + 2 + gy, col);
         }
     }
 }
@@ -381,9 +429,11 @@ static void SDLCALL hud_draw(int w, int h, void *ctx) {
         int sc = (int)(rh / 450.0f); s_menu_scale = sc < 1 ? 1 : sc;
     }
     int hover = open ? menu_item_at(px, py) : -1;
+    MenuItem items[MAX_ITEMS]; const int n = s_n_items, mw = s_mw, mh = s_mh;
+    memcpy(items, s_items, sizeof items);
     unlock();
     if (!open || !have || !gl_init()) return;
-    render_menu(hover);
+    render_menu(items, n, mw, mh, hover);
 
     GLint prog, vao, abuf, atex, tex0, samp, vp[4], bsrc, bdst, bsrca, bdsta, beq, beqa, unpack, rowlen;
     p_glGetIntegerv(GL_CURRENT_PROGRAM, &prog); p_glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vao);
@@ -399,7 +449,7 @@ static void SDLCALL hud_draw(int w, int h, void *ctx) {
                     cull = p_glIsEnabled(GL_CULL_FACE), scis = p_glIsEnabled(GL_SCISSOR_TEST);
 
     const float d = s_pixel_density, s = (float)s_menu_scale;
-    const float x0 = mx * d, y0 = my * d, x1 = x0 + MENU_W * s, y1 = y0 + MENU_H * s;
+    const float x0 = mx * d, y0 = my * d, x1 = x0 + (float)mw * s, y1 = y0 + (float)mh * s;
     const float X0 = x0 / w * 2 - 1, X1 = x1 / w * 2 - 1, Y0 = 1 - y0 / h * 2, Y1 = 1 - y1 / h * 2;
     const float q[] = { X0, Y0, 0, 0,  X1, Y0, 1, 0,  X0, Y1, 0, 1,  X1, Y1, 1, 1 };
 
@@ -413,7 +463,7 @@ static void SDLCALL hud_draw(int w, int h, void *ctx) {
     p_glBindSampler(0, 0);
     p_glBindTexture(GL_TEXTURE_2D, g.tex);
     p_glPixelStorei(GL_UNPACK_ALIGNMENT, 4); p_glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-    p_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, MENU_W, MENU_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, s_img);
+    p_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, mw, mh, 0, GL_RGBA, GL_UNSIGNED_BYTE, s_img);
     p_glBindVertexArray(g.vao);
     p_glBindBuffer(GL_ARRAY_BUFFER, g.vbo);
     p_glBufferData(GL_ARRAY_BUFFER, sizeof q, q, GL_STREAM_DRAW);
@@ -461,9 +511,13 @@ static void selftest_step(void) {
         e.tfinger.x = b / (float)ww; e.tfinger.y = c / (float)wh;
     } else return;
     SDL_PushEvent(&e);
-    fprintf(stderr, "chptr %s menu=%d px=%.0f,%.0f t=%llu\n", cmd, s_menu_open, s_px, s_py, (unsigned long long)SDL_GetTicks());
+    fprintf(stderr, "chptr %s menu=%d items=%d screen=%08X px=%.0f,%.0f t=%llu\n", cmd, s_menu_open, s_n_items, (unsigned)s_screen_ra, s_px, s_py, (unsigned long long)SDL_GetTicks());
 }
 #endif
+
+void ch_pointer_set_screen(uint32_t ra) {
+    lock(); s_screen_ra = ra; unlock();
+}
 
 int ch_pointer_enabled(void) {
     static int off = -1;
@@ -516,5 +570,6 @@ void ch_pointer_frame(ChPointerFrame *out) {
 
 #else /* SDL2 builds: no pointer mode */
 int  ch_pointer_enabled(void) { return 0; }
+void ch_pointer_set_screen(uint32_t ra) { (void)ra; }
 void ch_pointer_frame(ChPointerFrame *out) { memset(out, 0, sizeof *out); }
 #endif

@@ -3,7 +3,7 @@
 Mapped 2026-11-22 on the Linux headless build, using the debug server (RAM dumps, write traces, profiler) and the executable. Builds on [CAMPAIGN_RAM_MAP.md](CAMPAIGN_RAM_MAP.md). Verified = seen live.
 
 ## Headline result (verified)
-**A campaign battle can be fought as a VS-mode battle**: player designs on both sides, the result written back into the map's OKE records by the game's own code. Tested at Europa turn 6 → 7: a CPU unit made of three MACHINE02 player designs fought the player's unit, and afterwards the game removed the dead OKEs, deleted the beaten CPU unit, kept the base and carried on. See "Recipe" below and [`src/side2_cards_test.c`](../../src/side2_cards_test.c).
+**A campaign battle can be fought as a VS-mode battle**: player designs on both sides, the result written back into the map's OKE records by the game's own code. Tested at Europa turn 6 → 7: a CPU unit made of three MACHINE02 player designs fought the player's unit, and afterwards the game removed the dead OKEs, deleted the beaten CPU unit, kept the base and carried on. Now built as `src/remote_battle.c` (see "Remote-player battles" below) and tested with the CPU side attacking and with the player attacking.
 
 ## Disc layout facts
 - **No code overlays.** One executable (SCUS_946.04) holds the campaign, VS mode and the battle engine.
@@ -47,19 +47,28 @@ In campaign mode (mode 1) the engine treats side 2 as CPU in several places:
 - `0x80030A28` gives side 2 model variant **F** (CPU colour); otherwise the variant is the design's colour byte (card +44, A-E).
 - The **OKE owner byte** (OKE table +00) is used too: with owner 2 the pre-battle screen shows no OKE icon and 0% fuel even when the stats come from a player card. In VS both sides' OKEs have owner 1; only the combatant list says side 1 or 2.
 
-### Recipe that worked (experiment build, `src/side2_cards_test.c`)
-1. Side 2's OKEs: owner byte = 1, card index = the design to use (it must be in the local player card table), HP and the two consumables (+08, +0A) set to sensible values for that design (40 / 336 for the starting designs).
-2. When `0x8001CF48` is first entered with mode 1, set mode = 2 and **leave it at 2**. `0x80035CD4` sets it back to 0 when the battle ends. (Restoring 1 after each call does not work: the battle is entered several times and stalls on an empty model file name.)
-3. The battle plays; HP, kills and consumables land in the OKE table; the game's own result code runs.
+### Remote-player battles (`src/remote_battle.c`, build with `-DCH_REMOTE_BATTLE=ON`)
+Three hooks, all passing straight through unless a remote battle is under way:
 
-Battlefield: with mode 2 the campaign's stage value 10 still worked (the battle used the map terrain).
+| Hook | Step |
+|---|---|
+| `0x80035CD4` campaign battle set-up (a0 = side-1 unit, a1 = side-2 unit) | **Before**: copy the remote designs into spare player card slots (highest slots side 1 does not use in this battle), backing them up. Side 2's OKEs: owner 1, card index = borrowed slot, fresh HP/ammo from the design (same formula as `0x8005B118`). |
+| `0x8001CF48` 3D battle | Set the mode to 2 (VS) and **leave it**; `0x80035CD4` writes 0 when the battle ends. |
+| `0x80035988` result code (runs for both units after the battle) | **After**, on its first call: side 2's OKEs back to owner 2 with their original card index (HP, kills and ammo from the battle kept); borrowed card slots restored. Then the game's own result code runs. |
 
-Test result: all three MACHINE02 OKEs destroyed; one player OKE survived at 127 HP with 1 kill (repaired to 231 by the game's end-of-turn code); the CPU unit was deleted, the player kept the base, and the mode went back to 0.
+**Important framework detail**: the battle waits for frames inside `0x80035CD4`, and the recompiled code then *re-enters the same function* to resume it, with `cpu->pc` set to the resume address. So `0x80035CD4` "returns" to a hook long before the battle is fought, and a hook sees many extra calls. Hooks must act only on fresh calls (`cpu->pc == 0`) and do their "after" work from the next function the game calls once the battle is over. (The first version restored too early and side 2 fought as CPU tanks; another early version stalled because it set the mode back to 1 between calls.)
 
-**Still to do for a real feature:**
-- Surviving side-2 OKEs must get owner byte 2 back after the battle (in the test they all died).
-- The remote player's 3 designs need room in the local player card table (28 slots, shared with the local player's own designs). Simplest: swap them into 3 slots just for the battle, then restore.
-- Check a battle where the player is the attacker (the test was the CPU unit attacking).
+Run-time switches (test harness until the turn-file layer exists): `CH_REMOTE_BATTLE=1` treats every CPU unit as a remote player's unit; `CH_REMOTE_DESIGNS=<file>` gives the remote designs as 1152-byte records (the disc's `DATA/DEFRP.CRD` = MACHINE01-03), OKE n of the unit using record n; `CH_REMOTE_FRESH=0` keeps the OKEs' current HP/ammo instead of fresh values.
+
+Battlefield: with mode 2 the campaign's stage value 10 still works (the map terrain).
+
+**Tests (Europa, turn 6 → 7, remote designs MACHINE01-03):**
+1. *CPU side attacks the player unit on the base.* Side 2 fought as the three remote designs (pre-battle screen shows the borrowed slots CARD-24/25/26 with their own ammo). Player won: two OKEs left (168 and 450 HP, 1 and 2 kills), all remote OKEs destroyed, the remote unit deleted, base kept. The borrowed slots came back byte for byte; the only card change was the game adding a loss to MACHINE03's record (+62), which is normal bookkeeping.
+2. *Player attacks* (player unit moving onto the remote unit, player OKEs weakened to 60 HP). Remote side won: its OKEs survived at 468 / 477 / 520 HP with 1 kill each, went back to owner 2 with their original card index, the player unit was deleted and the remote unit went on to take the base.
+
+**Known limit**: once survivors are back on the CPU side, the end-of-turn repair uses the CPU card's maximum (test 2: repaired to 680-732, above the design's 520). In campaign versus this is overwritten by the remote player's own turn file, but a later version could keep remote OKEs tied to their design between battles.
+
+**Still to do**: drive the hook from the turn file (which units are remote, which designs, and the reported result on the receiving device) instead of the test switches.
 
 ### Correction to the first campaign mapping
 The turn 6 → 7 base loss seen in the first mapping was **not a battle**. The player had no unit on the base, only 6 stored OKEs. When the CPU unit walked on, the base-capture code (`0x800358CC`) dismantled them (HP and owner cleared). A battle only happens when two **units** meet.
@@ -90,4 +99,4 @@ The turn 6 → 7 base loss seen in the first mapping was **not a battle**. The p
 ## Still to map
 - Whether the save number changes the file name, and whether an edited save loads.
 - Class limits (High/Low) and Tournament flow in VS.
-- The two consumables at OKE +08 / +0A (ammo and fuel are the likely meaning).
+- The meaning of OKE +08 (+0A/+0B are main and sub ammo).

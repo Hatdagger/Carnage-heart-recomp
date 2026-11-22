@@ -41,10 +41,7 @@ What was found:
 - Map damage carries over: the engine takes each OKE's starting HP from the OKE table.
 - The result still lands in the 6 OKE records, so the "report the result" plan is unchanged.
 
-Still to do for the real feature:
-- Put survivors on side 2 back to owner 2 after the battle.
-- Make room for the remote player's 3 designs in the local player card table (28 slots, shared with the local player's own designs). Simplest is to swap them in for the battle only.
-- Test a battle where the player attacks (the test had the CPU unit attacking).
+**Built (2026-11-22): `src/remote_battle.c`** (`-DCH_REMOTE_BATTLE=ON`). It borrows spare card slots for the remote designs during the battle, runs it in VS mode, then puts the remote OKEs back on side 2 and restores the cards. Tested both ways round (CPU side attacking, player attacking), including remote survivors. Next: drive it from the turn file instead of test switches.
 
 ### Saves and memory cards: mapped (2026-11-22)
 A campaign save is one 5-block file whose body is a straight copy of the campaign tables in RAM (cards, units, bases, OKEs, globals). No checksum found. A single design is one 1152-byte record at a known offset. See VS_MODE_AND_SAVES.md.
@@ -69,7 +66,7 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 
 ## Suggested order
 1. ~~Campaign RAM map~~ (done 2026-11-22).
-2. ~~Map VS mode and saves; test the "campaign battle through VS mode" idea~~ (done 2026-11-22: it works). Remaining: owner byte back to 2 for survivors, card-table room for the remote designs, a player-attacks test.
+2. ~~Map VS mode and saves; build and test remote-player battles~~ (done 2026-11-22, `src/remote_battle.c`).
 3. Map the player order screens (including re-orders) and factory data.
 4. Local hot-seat test on one machine: end turn, swap sides, play the other side.
 5. Turn files: capture orders and battle results on one copy, replay them on a second copy.

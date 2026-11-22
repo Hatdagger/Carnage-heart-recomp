@@ -52,9 +52,13 @@ Hex cell index = y * 24 + x (used for unit targets).
 |---|---|
 | +00 | Owner (0 empty, 1, 2). Also decides player vs CPU card table and the battle's icon/fuel display |
 | +03 | Card index (into the player or CPU card table, by owner) |
-| +04 | Kills in the last battle (added to the card's record afterwards) |
+| +04 | Kills in the last battle (added to the card's record afterwards; losses go to card +62) |
 | +06 | HP (s16). 0 or less = destroyed. The battle starts each OKE with this value, so damage carries over |
-| +08, +0A | Consumables used in battle (likely ammo and fuel); refilled at end of turn |
+| +08 | u16, from the design (card +54); meaning not confirmed |
+| +0A | Main-weapon ammo (shown on the pre-battle screen) |
+| +0B | Sub-weapon ammo (missiles etc.) |
+
+A new player OKE gets HP = card +52, +08 = card +54, main ammo and sub ammo from the parts table `0x800C0C84` (36-byte records) for the parts at card +45 and +38 (`0x8005B118`). Up to 200 OKEs.
 
 ## End-of-turn routine: 0x8001B8EC
 In order:

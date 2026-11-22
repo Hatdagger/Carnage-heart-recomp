@@ -80,6 +80,16 @@ foreach(_PSX_RUNTIME_CONFIG game.toml game_options.toml)
     endif()
 endforeach()
 
+# Launcher menu: LAUNCH GAME / ONLINE PLAY / SHARE DATA / UPDATE / SETTINGS,
+# for controller, keyboard or a 2-button mouse (launcher/ch_menu.inc).
+if(PSX_RECOMP_UI)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ch_launcher_menu.cmake")
+    ch_add_launcher_menu(psx-runtime)
+    if(TARGET psx-runtime-pgxp)
+        ch_add_launcher_menu(psx-runtime-pgxp)
+    endif()
+endif()
+
 # PlayStation Mouse support restored from Carnage Heart EZ (src/mouse_pad_hle.c).
 # HLE = mouse restored; LLE = original USA controller routine.
 set(CH_MOUSE_IMPL "HLE" CACHE STRING "HLE (mouse restored) or LLE (original)")

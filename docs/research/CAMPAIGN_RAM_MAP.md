@@ -53,6 +53,7 @@ Hex cell index = y * 24 + x (used for unit targets).
 
 ### Production line (12 bytes, base +10 + 12×n)
 Verified 2026-11-22 on the Factory screens (base 2, Europa).
+
 | Offset | What |
 |---|---|
 | +00 | u8: 1 = nothing on order, 0 = an amount is on order |
@@ -103,6 +104,7 @@ Base menu (Tactics): Deploy Units, Form Unit, Factory, Unit Command, Base List.
 **Form Unit** (`0x8006F120`). Picking OKEs (by hand or Auto) puts the unit together straight away in the first free player slot: each OKE goes in through `0x80071E34` (the same routine the CPU uses), gets OKE +01 = 1, and is loaded with main/sub ammo and fuel from the base stock (`0x80076044`). Leaving the screen commits the unit: owner 1, x/y = the base, +0A = 6, ammo 10000 and fuel 1000, both taken from the base stock. No funds are spent. The unit has no task yet.
 
 **Deploy Units** and **Unit Command** open the same order menu for one unit: Move, Defend Base, Capture Base, Patrol, Standby. Deploy lists formed units still at a base; Unit Command lists units in the field (including ones on the move). Each order is a small handler that writes the unit at index `0x800DF408`, then calls `0x80034C38(unit)`, which recomputes the path (+06 for patrol, +0A, +0B):
+
 | Order | Handler | Writes |
 |---|---|---|
 | Move | `0x8003A884` | +01 = 1, +06 = picked cell |

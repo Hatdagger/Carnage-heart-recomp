@@ -143,7 +143,9 @@ jobs:
           ZIP=$(ls dist/carnageheart-setup-*-"${{ matrix.artifact }}".zip | head -1)
           LIST="$(unzip -Z1 "${ZIP}")"
           for must in game.toml CMakeLists.txt codegen_setup.c src/mouse_pad_hle.c \
-                      src/disc_autodetect.c seeds/ psxrecomp/psxrecomp_cli.py recomp-ui/; do
+                      src/disc_autodetect.c seeds/ psxrecomp/psxrecomp_cli.py recomp-ui/ \
+                      psxrecomp/recompiler/lib/rabbitizer/include/generated/InstrId_enum.h \
+                      psxrecomp/recompiler/lib/rabbitizer/cplusplus/include/generated/; do
             grep -q "^${must}" <<<"${LIST}" || { echo "::error::kit lacks ${must}"; exit 1; }
           done
           # Never ship game data, BIOS dumps or recompiled game code.

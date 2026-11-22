@@ -47,3 +47,22 @@ bash "${PACKAGER}" \
   --disc-hint "your Carnage Heart (USA) disc image (.cue + .bin), placed beside the exe" \
   --ship-without-overlay-cache-because "Carnage Heart has no code overlays; the whole game is compiled on first launch" \
   "${PROJECT_ARGS[@]}"
+
+# The framework packager drops every directory named "generated" (to keep
+# recompiled game C out), which also strips rabbitizer's generated headers.
+# The player's PC rebuilds psxrecomp-game/-bios from these sources on first
+# run, and without the headers that build fails ("generated/InstrId_enum.h
+# file not found"), so setup stops before the game or OpenBIOS is built.
+# Put the headers back; they are library source, not game code.
+VERSION_STR="${RELEASE_VERSION:-$(tr -d '[:space:]' < "${ROOT}/VERSION")}"
+KIT_ZIP="${ROOT}/dist/carnageheart-setup-${VERSION_STR}-${ARTIFACT}.zip"
+[[ -f "${KIT_ZIP}" ]] || KIT_ZIP="$(ls "${ROOT}"/dist/carnageheart-setup-*-"${ARTIFACT}".zip | head -1)"
+RABBITIZER_GEN=(
+  psxrecomp/recompiler/lib/rabbitizer/include/generated
+  psxrecomp/recompiler/lib/rabbitizer/cplusplus/include/generated
+)
+for d in "${RABBITIZER_GEN[@]}"; do
+  [[ -d "${ROOT}/${d}" ]] || { echo "error: missing ${d} (submodule not checked out?)" >&2; exit 1; }
+done
+(cd "${ROOT}" && zip -r -q "${KIT_ZIP}" "${RABBITIZER_GEN[@]}")
+echo "Added rabbitizer generated headers to $(basename "${KIT_ZIP}")"

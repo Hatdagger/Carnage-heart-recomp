@@ -50,9 +50,13 @@ void func_8003E154(CPUState *cpu)
     cpu->write_word(PAD_PREV, buttons);
 
     if ((type & 0xF0u) == 0x10u && cpu->read_word(MOUSE_MODE) != 0) {
-        /* EZ mouse branch: left button -> 0x20 (Circle), right -> 0x40 (Cross). */
+        /* EZ maps left -> 0x20 (Circle) and right -> 0x40 (Cross), because in
+         * the Japanese release Circle confirms. The USA release swapped the
+         * roles (Cross 0x40 confirms, Circle 0x20 backs out), including in the
+         * leftover mouse-only code paths. So here left -> 0x40 (confirm) and
+         * right -> 0x20 (back / open menu), which matches EZ's behaviour. */
         uint8_t b3 = (uint8_t)~cpu->read_byte(PAD1_BUF + 3);
-        buttons = ((uint32_t)(b3 << 4) & 0x40u) | ((uint32_t)(b3 << 2) & 0x20u);
+        buttons = ((uint32_t)(b3 << 3) & 0x40u) | ((uint32_t)(b3 << 3) & 0x20u);
         cpu->write_word(PAD_BUTTONS, buttons);
         int32_t x = (int32_t)cpu->read_word(CURSOR_X) + ez_signed_x(cpu->read_byte(PAD1_BUF + 4));
         int32_t y = (int32_t)cpu->read_word(CURSOR_Y) + ez_signed_y(cpu->read_byte(PAD1_BUF + 5));
@@ -83,4 +87,57 @@ void func_8003E154(CPUState *cpu)
         cpu->write_word(REPEAT_FLAG, 0);
 
     cpu->pc = cpu->gpr[31]; /* jr $ra */
+}
+
+/* Hotspot navigator (USA 0x8003E89C, EZ 0x8004290C). Each frame the menus call
+ * it with a table of clickable boxes (id, x, y, w, h). For the D-pad it jumps
+ * the cursor between boxes, but it also snaps the cursor to the centre of
+ * whatever box the cursor is over. EZ does the same. With a mouse that makes
+ * the pointer magnetic: small moves are pulled back every frame, so it is hard
+ * to leave a box or reach the one you want. In mouse mode we run the original
+ * and then put the cursor back where the mouse left it. The click still acts
+ * on the box under the pointer, because callers hit-test the cursor themselves
+ * (0x8003EEC4) before calling this. D-pad behaviour is unchanged.
+ * The generated body can return early (interrupt bail) and be resumed later
+ * through this same entry point, so the restore waits until it really returns. */
+void ch_mouse_lle_func_8003E89C(CPUState *cpu);
+
+#define NAV_ENTRY 0x8003E89Cu
+static int nav_pending;
+static uint32_t nav_ra, nav_x, nav_y;
+
+void func_8003E89C(CPUState *cpu)
+{
+    const int fresh = (cpu->pc == 0u || cpu->pc == NAV_ENTRY);
+    if (fresh) {
+        nav_pending = cpu->read_word(MOUSE_MODE) != 0;
+        nav_ra = cpu->gpr[31];
+        nav_x = cpu->read_word(CURSOR_X);
+        nav_y = cpu->read_word(CURSOR_Y);
+#ifdef CH_MOUSE_SELFTEST
+        if (getenv("CH_MOUSE_SELFTEST_SNAP")) nav_pending = 0; /* test: original snapping */
+        { /* test: log each new hotspot table (caller, origin, boxes) */
+            static uint32_t last_t, last_ra;
+            uint32_t t = cpu->gpr[6];
+            if (t != last_t || nav_ra != last_ra) {
+                last_t = t; last_ra = nav_ra;
+                fprintf(stderr, "chnav ra=%08X org=%d,%d table=%08X:", nav_ra, (int)cpu->gpr[4], (int)cpu->gpr[5], t);
+                for (int k = 0; k < 48; ++k) {
+                    uint32_t e = t + (uint32_t)k * 0x12u;
+                    uint16_t id = cpu->read_half(e);
+                    if (!id) break;
+                    fprintf(stderr, " %u@%u,%u,%ux%u", id, cpu->read_half(e + 2), cpu->read_half(e + 4),
+                            cpu->read_half(e + 6), cpu->read_half(e + 8));
+                }
+                fprintf(stderr, "\n");
+            }
+        }
+#endif
+    }
+    ch_mouse_lle_func_8003E89C(cpu);
+    if (nav_pending && cpu->pc == nav_ra) {
+        cpu->write_word(CURSOR_X, nav_x);
+        cpu->write_word(CURSOR_Y, nav_y);
+        nav_pending = 0;
+    }
 }

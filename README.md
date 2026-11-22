@@ -24,7 +24,7 @@ This repository contains **no game data and no recompiled game code**. You gener
 ## Status
 
 - Linux x64: boots on the bundled OpenBIOS (no Sony BIOS needed), reaches the title screen and the campaign.
-- **PlayStation Mouse support restored.** The USA release had its mouse code removed; it is put back from *Carnage Heart EZ* (Japan) in `src/mouse_pad_hle.c`. Mouse movement and clicking work. List menus still act on the highlighted item rather than the item under the cursor (work in progress).
+- **PlayStation Mouse support restored.** The USA release had its mouse code removed; it is put back from *Carnage Heart EZ* (Japan) in `src/mouse_pad_hle.c`. Left click confirms and right click goes back (the USA button roles, not EZ's), menus follow the pointer and click the item under it, and the cursor no longer snaps to the centre of menu boxes. Pointer/touch control in a normal window is in progress.
 
 ## Play on Windows (setup kit)
 

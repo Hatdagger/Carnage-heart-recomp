@@ -9,3 +9,46 @@ name = "BootEntry"
 emit = false
 status = "guessed"
 note = "SYSTEM.CNF / EXE entry PC (probe seed)"
+
+# --- Input / mouse cursor (mapped 2026-11-21 against Carnage Heart EZ MAIN.EXE) ---
+[[func]]
+pc = 0x8003E154
+name = "PadRead"
+emit = false
+status = "confirmed"
+note = "Per-frame controller read; mouse branch removed in USA (EZ 0x80042168). HLE in src/mouse_pad_hle.c"
+
+[[func]]
+pc = 0x8003E338
+name = "CursorDpadMove"
+emit = false
+status = "guessed"
+note = "Free cursor moved by D-pad with acceleration (EZ 0x80042380). 42 callers: map/grid style screens"
+
+[[func]]
+pc = 0x8003E4C8
+name = "CursorDraw"
+emit = false
+status = "guessed"
+note = "Queues the cursor sprite at cursor X/Y minus hot-spot offset 0x800DF370/74 (EZ 0x80042510)"
+
+[[func]]
+pc = 0x8003E89C
+name = "HotspotNavigate"
+emit = false
+status = "confirmed"
+note = "(org x, org y, table) D-pad jumps between boxes; snaps cursor to centre of the box under it. HLE wrapper undoes snap in mouse mode (EZ 0x8004290C)"
+
+[[func]]
+pc = 0x8003EEC4
+name = "HotspotDrawHitTest"
+emit = false
+status = "guessed"
+note = "(org x, org y, table, n) draws boxes, returns id of box under cursor; callers act on it on Cross/Circle (EZ 0x80042EC0)"
+
+[[func]]
+pc = 0x800220F4
+name = "CampaignCommandLoop"
+emit = false
+status = "guessed"
+note = "Reads mouse flag: pad Select / mouse 0x20 open command menu (EZ 0x80026390)"

@@ -14,6 +14,7 @@
 #include <stdint.h>
 #include "cpu_state.h"
 #include "pointer_menu.h"
+#include "screen_labels.h"
 
 #ifdef CH_MOUSE_SELFTEST
 /* Test-only: fake a PS1 Mouse on port 1. Each line appended to the file named
@@ -47,9 +48,13 @@ static int nav_resnap;
 
 /* PadRead count, and the return address of the latest HotspotNavigate /
  * HotspotDrawHitTest call with the PadRead count it was seen at. The menu
- * screen calling them each frame is the screen on show (src/screen_labels.c). */
-static uint32_t pad_reads, screen_ra, screen_seen;
+ * screen calling them each frame is the screen on show (src/screen_labels.c).
+ * battle_seen: PadRead count when the battle viewer (0x8001FB04) last ran. */
+static uint32_t pad_reads, screen_ra, screen_seen, battle_seen = 0xFFFFFF00u;
 static void note_screen(uint32_t ra) { screen_ra = ra; screen_seen = pad_reads; }
+
+#define BATTLE_MODE   0x800DF3D0u /* 0 = test battle (Start: status list) */
+#define BATTLE_PADS   0x800DF3D8u /* 2 = two players: L2 / Start don't switch OKE */
 
 static int32_t ez_signed_x(uint8_t b) { return b < 0x81 ? (int32_t)b : -(int32_t)(uint8_t)~b; }
 static int32_t ez_signed_y(uint8_t b) { return b < 0x81 ? (int32_t)(b >> 1) : -(int32_t)((b >> 1) ^ 0x7F); }
@@ -61,8 +66,16 @@ void func_8003E154(CPUState *cpu)
 #endif
     ++pad_reads;
     /* A screen that called the hotspot routines within the last few frames is
-     * still the one on show; otherwise it is not a hotspot menu (map, battle). */
-    ch_pointer_set_screen(pad_reads - screen_seen <= 4u ? screen_ra : 0u);
+     * still the one on show (a menu opened during a battle wins); else the
+     * battle viewer if it ran; else not a known screen. */
+    if (pad_reads - screen_seen <= 4u) {
+        ch_pointer_set_screen(screen_ra);
+    } else if (pad_reads - battle_seen <= 4u) {
+        ch_screen_set_battle((int)cpu->read_word(BATTLE_MODE), (int)cpu->read_word(BATTLE_PADS));
+        ch_pointer_set_screen(CH_SCREEN_BATTLE);
+    } else {
+        ch_pointer_set_screen(0u);
+    }
     uint8_t type = cpu->read_byte(PAD1_BUF + 1);
     uint32_t buttons = cpu->read_word(PAD_BUTTONS);
     cpu->write_word(PAD_PREV, buttons);
@@ -221,4 +234,15 @@ void func_8003EEC4(CPUState *cpu)
 {
     if (cpu->pc == 0u || cpu->pc == 0x8003EEC4u) note_screen(cpu->gpr[31]);
     ch_mouse_lle_func_8003EEC4(cpu);
+}
+
+/* Battle viewer input (USA 0x8001FB04, called every frame for each OKE while
+ * a battle plays, in test, campaign and VS battles). Unchanged; notes that a
+ * battle is on show. The battle's buttons are read by 0x800220F4. */
+void ch_mouse_lle_func_8001FB04(CPUState *cpu);
+
+void func_8001FB04(CPUState *cpu)
+{
+    if (cpu->pc == 0u || cpu->pc == 0x8001FB04u) battle_seen = pad_reads;
+    ch_mouse_lle_func_8001FB04(cpu);
 }

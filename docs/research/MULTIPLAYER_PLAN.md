@@ -30,7 +30,15 @@ Researched 2026-11-21, updated 2026-11-22 after the campaign RAM mapping and the
 4. **Side swap**: each player always plays "as the player" (slots 0-31, owner 1). The turn file is stored from the sender's point of view; the receiver swaps owner bytes 1<->2 and unit halves 0-31 <-> 32-63 when loading it.
 5. Then they take their turn, and so on.
 
-**Capturing orders**: the simplest reliable way is to compare each of my units' task/target at End Turn with what they were at the start of my turn. Any difference is an order. This catches re-orders however they were given, without hooking every order screen. To confirm when mapping the Unit Command screen: whether re-ordering also resets the path state (+0A/+0B), which the replay would need to copy too.
+**Capturing orders**: the simplest reliable way is to compare each of my units' task/target at End Turn with what they were at the start of my turn. Any difference is an order. This catches re-orders however they were given, without hooking every order screen.
+
+### What the order and factory mapping showed (2026-11-22, step 3)
+Details in CAMPAIGN_RAM_MAP.md ("Order screens" and "Production line").
+- **Every order is 1-3 unit fields**: task (+01: 0 standby, 1 move, 2 defend, 3 capture, 4 patrol), target cell (+06) and, for Defend, home cell (+08). Deploy and Unit Command use the same five handlers, so re-ordering a moving unit is no different from a first order.
+- **Re-ordering does reset the path state** (+0A/+0B), through `0x80034C38(unit)`. The replay should write the fields and call `0x80034C38`, the same as the game does (or copy +0A/+0B).
+- **Forming a unit** spends no funds; it moves OKEs from a base into a free unit slot and takes ammo/fuel from that base's stock. So a formed unit = a new unit record + those OKE records (+01 = 1) + the base's new stock.
+- **Factory orders** are the line records in the base (product, amount), plus Add Line (base +58) and Upgrade (line level/capacity), which cost funds immediately. Production itself (spending funds, finishing OKEs and ammo) happens in End Turn (`0x800566F4`).
+- **Consequence for the turn file**: diffing at End Turn gives the orders; for formed units and the factory it is simpler and safer to send the resulting records (the unit, its OKEs, the base record and funds) than to replay the screens. On the receiver's device the remote side's production must not be run by the CPU factory code (`0x80055B00`); either run the player's production routine for that side or apply the sender's post-production base records and new OKEs.
 
 ### Custom programs on the CPU side: answered (2026-11-22)
 **Campaign battles can be fought as VS-mode battles** (the project owner's idea). Tested at Europa turn 6 → 7 with an experiment build: a CPU unit made of three MACHINE02 player designs fought the player's unit with their own chip programs. Afterwards the game's own code removed the dead OKEs, deleted the beaten unit and kept the base. Details and the exact recipe are in VS_MODE_AND_SAVES.md.
@@ -47,8 +55,6 @@ What was found:
 A campaign save is one 5-block file whose body is a straight copy of the campaign tables in RAM (cards, units, bases, OKEs, globals). No checksum found. A single design is one 1152-byte record at a known offset. See VS_MODE_AND_SAVES.md.
 
 ### Still to map
-- The player's order screens, including re-ordering a unit on the move (expected to write the same unit fields).
-- Factory/production data in the base record, and OKE stock per base.
 - Negotiation/research state.
 
 ### Other parts
@@ -67,7 +73,7 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 ## Suggested order
 1. ~~Campaign RAM map~~ (done 2026-11-22).
 2. ~~Map VS mode and saves; build and test remote-player battles~~ (done 2026-11-22, `src/remote_battle.c`).
-3. Map the player order screens (including re-orders) and factory data.
+3. ~~Map the player order screens (including re-orders) and factory data~~ (done 2026-11-22).
 4. Local hot-seat test on one machine: end turn, swap sides, play the other side.
 5. Turn files: capture orders and battle results on one copy, replay them on a second copy.
 6. Storage, then notifications (desktop, then Android).

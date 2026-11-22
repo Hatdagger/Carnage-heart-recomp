@@ -62,7 +62,8 @@ def read(addr, n):
 
 
 def write(addr, data):
-    return cmd(cmd='write_ram', addr='%x' % addr, hex=data.hex())
+    # write_ram only takes one byte ('val'); write_bulk takes up to 1024 bytes as hex.
+    return cmd(cmd='write_bulk', addr='%x' % addr, hex=data.hex())
 
 
 if __name__ == '__main__':
@@ -76,6 +77,17 @@ if __name__ == '__main__':
         wait(int(a[1])); print(shot())
     else:
         print(json.dumps(cmd(cmd=a[0], **dict(x.split('=', 1) for x in a[1:])), indent=1)[:3000])
+
+
+POINTER = 0x800DF368  # menu pointer x, y (s32 each, screen pixels)
+
+
+def click(x, y, after=40):
+    """Put the menu pointer at (x, y) and press X. Faster than steering it with the d-pad."""
+    import struct
+    write(POINTER, struct.pack('<ii', x, y))
+    wait(3)
+    press('x', hold=8, after=after)
 
 
 def dump(path=None):

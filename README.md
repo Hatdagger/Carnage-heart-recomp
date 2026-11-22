@@ -26,7 +26,16 @@ This repository contains **no game data and no recompiled game code**. You gener
 - Linux x64: boots on the bundled OpenBIOS (no Sony BIOS needed), reaches the title screen and the campaign.
 - **PlayStation Mouse support restored.** The USA release had its mouse code removed; it is put back from *Carnage Heart EZ* (Japan) in `src/mouse_pad_hle.c`. Mouse movement and clicking work. List menus still act on the highlighted item rather than the item under the cursor (work in progress).
 
-## Build from your own disc
+## Play on Windows (setup kit)
+
+1. Download `carnageheart-setup-<version>-windows-x64.zip` from [Releases](https://github.com/Hatdagger/Carnage-heart-recomp/releases) and unzip it anywhere.
+2. Put your own Carnage Heart (USA) Redump dump (the `.cue` and its `.bin` tracks) **beside `CarnageHeart_Recompiled.exe`** (or in a `disc` folder next to it).
+3. Run `CarnageHeart_Recompiled.exe`. The first launch is the installer: it finds the disc (it only asks if the disc isn't there), downloads the portable compiler pack once, turns your disc into C and builds the game on your PC. This takes a while the first time.
+4. Every launch after that opens the game's launcher directly.
+
+No game data or recompiled code is downloaded; everything game-specific comes from your disc.
+
+## Build from your own disc (developers)
 
 You need your own Redump dump of Carnage Heart (USA): the `.cue` and all three `.bin` tracks.
 
@@ -74,9 +83,7 @@ You must own the original game. Disc images under `disc/` are gitignored and
 must never be committed. Retail BIOS dumps are not redistributed and no C
 derived from one may be committed; releases run on the bundled MIT OpenBIOS.
 
-`generated/` (the recompiled game C) **is committed**: releases ship the
-compiled game, built by CI from that tree. Regenerate and commit it whenever
-seeds or the framework pin change.
+`generated/` (the recompiled game C) is **not** committed. Releases are setup kits built by the *Setup kit* workflow (`.github/workflows/setup-kit.yml`) with no disc; each player's first launch generates and compiles the game locally.
 
 Default app icon: `assets/psxrecomp.ico` (and `.png` / `.svg`) — Retro-themed controller mark from `psxrecomp/assets/`. Windows builds embed it via `APP_ICON`.
 

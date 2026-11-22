@@ -1,9 +1,15 @@
 /* Title config for psxrecomp/host/psxrecomp_codegen_host.
- * Wired only when the build opts into -DPSX_SETUP_WIZARD=ON. */
+ * Wired only when the build opts into -DPSX_SETUP_WIZARD=ON (CMakeLists does,
+ * whenever the recomp-ui submodule is present). */
 
 #include "codegen_setup.h"
 
 #include "psxrecomp_codegen_host.h"
+
+#include <stddef.h>
+
+/* src/disc_autodetect.c: preselect a Carnage Heart disc found beside the exe. */
+int ch_disc_autodetect(const char* argv0, char* found, size_t found_cap);
 
 static const PsxrecompCodegenHostConfig kCodegenConfig = {
     .display_name = "CarnageHeart",
@@ -39,7 +45,9 @@ void psx_game_codegen_relaunch_or_exit(const char* disc_path) {
     psxrecomp_codegen_host_relaunch_or_exit(disc_path);
 }
 
+/* Runs first thing in main() for both the setup host and the built game. */
 void psx_game_codegen_forward_if_built(int argc, char** argv) {
+    (void)ch_disc_autodetect(argc > 0 && argv ? argv[0] : NULL, NULL, 0);
     psxrecomp_codegen_host_forward_if_built(&kCodegenConfig, argc, argv);
 }
 

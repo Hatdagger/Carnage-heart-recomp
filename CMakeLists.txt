@@ -16,8 +16,17 @@ project(CarnageHeartRecomp LANGUAGES C CXX)
 # The wizard (WIZARD_CMAKE_BLOCK / ENABLE_SETUP_WIZARD) is the first-run disc
 # picker; releases are compiled from the committed generated/ C, so it never
 # needs to generate or rebuild anything on a player's machine.
-set(PSX_RECOMP_UI OFF CACHE BOOL
-    "No recomp-ui submodule in this scaffold" FORCE)
+#
+# Carnage Heart ships as a self-compiling kit (the repo holds no generated C):
+# the zip-root exe is a recomp-ui launcher + setup wizard that finds the
+# player's disc, generates the game C and builds the game on their machine.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/recomp-ui/recomp_ui.cmake")
+    set(PSX_RECOMP_UI ON CACHE BOOL "recomp-ui launcher (submodule)")
+    set(PSX_SETUP_WIZARD ON CACHE BOOL "First-run disc picker + Generate & rebuild")
+else()
+    set(PSX_RECOMP_UI OFF CACHE BOOL
+        "recomp-ui submodule missing (git submodule update --init)" FORCE)
+endif()
 # Full netplay UI — enable after adding recomp-ui + testing:
 # if(EXISTS "${PSXRECOMP_ROOT}/lib/recomp-net/CMakeLists.txt")
 #     set(PSX_NETPLAY ON CACHE BOOL "…" FORCE)
@@ -42,7 +51,7 @@ psxrecomp_add_game_runtime(psx-runtime
     PRELOADED_MODS_DIR "${PSX_PRELOADED_MODS}"
     # ENABLE_NETPLAY_IF_PRESENT
     # NETPLAY_LOBBY_URL "ws://netplay.retcomm.net:8765"
-    # ENABLE_SETUP_WIZARD
+    ENABLE_SETUP_WIZARD
     WINDOW_TITLE "CarnageHeart Recompiled"
     DEFAULT_GAME_CONFIG_PATH "game.toml"
     MAX_PLAYERS 2
@@ -53,7 +62,10 @@ psxrecomp_add_game_runtime(psx-runtime
     # it fails instead of building a setup host.
     GEN_MARKER "generated/SCUS_946.04_dispatch.c"
     GEN_FULL_GLOB "generated/SCUS_946.04_full_*.c"
-    # CODEGEN_SETUP_SOURCES — add with recomp-ui / wizard later
+    # Setup-host hooks: codegen host config + "disc beside the exe" finder.
+    CODEGEN_SETUP_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/codegen_setup.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/disc_autodetect.c"
 )
 
 # Stage runtime configs next to the exe for direct build/ launches. Only copy
@@ -77,6 +89,9 @@ if(TARGET psx-runtime-pgxp)
     list(APPEND _ch_mouse_targets psx-runtime-pgxp)
 endif()
 file(GLOB _ch_game_shards "${CMAKE_CURRENT_SOURCE_DIR}/generated/SCUS_946.04_full_*.c")
+# The setup host (no generated C yet) has nothing to patch; the player's
+# rebuild after Generate configures again with the shards present.
+if(_ch_game_shards AND NOT PSXRECOMP_FORCE_SETUP_HOST)
 psxrecomp_select_guest_implementation(
     NAME ch_mouse IMPLEMENTATION ${CH_MOUSE_IMPL}
     TARGETS ${_ch_mouse_targets}
@@ -85,6 +100,7 @@ psxrecomp_select_guest_implementation(
     HLE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/mouse_pad_hle.c"
     REFERENCE_PREFIX ch_mouse_lle_
     SNAPSHOT_TAG 0x43484D31)
+endif()
 # Test-only: -DCH_MOUSE_SELFTEST=ON drives a fake mouse from a file (see src/mouse_pad_hle.c).
 option(CH_MOUSE_SELFTEST "Fake PS1 Mouse from CH_MOUSE_SELFTEST_FILE (testing only)" OFF)
 if(CH_MOUSE_SELFTEST)

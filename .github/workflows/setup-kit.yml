@@ -1,0 +1,174 @@
+# Carnage Heart setup kit: builds the launcher + setup wizard (no game C, no
+# disc needed) for Windows and Linux and attaches the zips to a release.
+# Players unzip, put their disc beside the exe and run it; the first launch
+# compiles the game on their machine, later launches go straight to it.
+#
+# Run it from the Actions tab ("Setup kit" > Run workflow) or push a vX.Y.Z tag.
+name: Setup kit
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 0.2.0). Empty = VERSION file'
+        required: false
+        default: ''
+      publish:
+        description: 'Create the GitHub Release'
+        type: boolean
+        default: true
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.artifact }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            artifact: windows-x64
+            shell: 'msys2 {0}'
+          - os: ubuntu-24.04
+            artifact: linux-x64
+            shell: bash
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          RAW="${{ github.event.inputs.version }}"
+          [[ -z "${RAW}" && "${GITHUB_REF_TYPE}" == tag ]] && RAW="${GITHUB_REF_NAME}"
+          [[ -z "${RAW}" ]] && RAW="$(tr -d '[:space:]' < VERSION)"
+          VER="${RAW#v}"
+          printf '%s\n' "${VER}" > VERSION
+          echo "RELEASE_VERSION=${VER}" >> "$GITHUB_ENV"
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup MSYS2 (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-pkgconf mingw-w64-x86_64-python
+            curl zip unzip rsync
+
+      - name: Install deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config libgl1-mesa-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
+            libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libasound2-dev \
+            libpulse-dev libudev-dev zip unzip rsync
+
+      - name: Prefetch SDL3 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash psxrecomp/tools/ci/prefetch_sdl3.sh --out-dir .cache/sdl3-src
+
+      - name: Fetch portable toolchain (Windows emitters)
+        if: runner.os == 'Windows'
+        uses: ./psxrecomp/.github/actions/fetch-toolchain
+        with:
+          artifact: ${{ matrix.artifact }}
+
+      # psxrecomp-game / psxrecomp-bios ship in the kit: they turn the
+      # player's disc into C on first launch.
+      - name: Build recompiler tools
+        uses: ./psxrecomp/.github/actions/build-emitters
+
+      - name: Build setup host (launcher + wizard, no game C)
+        run: |
+          set -euo pipefail
+          if [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* ]]; then
+            unset PSXRECOMP_TOOLCHAIN_DIR TOOLCHAIN_DIR RETCOMM_TOOLCHAIN_DIR CMAKE_PREFIX_PATH || true
+          fi
+          SDL_SRC="$(cd .cache/sdl3-src && pwd -W 2>/dev/null || pwd)"
+          cmake -S . -B build-setup -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPSXRECOMP_FORCE_SETUP_HOST=ON \
+            -DPSX_SETUP_WIZARD=ON \
+            -DPSX_RECOMP_UI=ON \
+            -DPSX_NETPLAY=OFF \
+            -DPSX_ENABLE_VULKAN=OFF \
+            -DPSX_GAME_VERSION="${RELEASE_VERSION}" \
+            -DPSX_RELEASE_CHANNEL=public \
+            -DFETCHCONTENT_SOURCE_DIR_SDL3="${SDL_SRC}" \
+            2>&1 | tee configure.log
+          grep -q 'setup host (no game C' configure.log || { echo "::error::did not configure as a setup host"; exit 1; }
+          cmake --build build-setup --target psx-runtime -j"$(nproc)"
+
+      - name: Package kit
+        run: |
+          set -euo pipefail
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            export PSXRECOMP_RUNTIME_BIN_DIR=/mingw64/bin
+          fi
+          export EXCLUDE_DEV_MODS=1
+          bash scripts/package_setup_kit.sh build-setup "${{ matrix.artifact }}" build-recompiler
+          ls -la dist/
+
+      - name: Verify kit contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP=$(ls dist/carnageheart-setup-*-"${{ matrix.artifact }}".zip | head -1)
+          LIST="$(unzip -Z1 "${ZIP}")"
+          for must in game.toml CMakeLists.txt codegen_setup.c src/mouse_pad_hle.c \
+                      src/disc_autodetect.c seeds/ psxrecomp/psxrecomp_cli.py recomp-ui/; do
+            grep -q "^${must}" <<<"${LIST}" || { echo "::error::kit lacks ${must}"; exit 1; }
+          done
+          # Never ship game data, BIOS dumps or recompiled game code.
+          if grep -iE '\.(cue|iso|img|chd|mcd|mcr)$|(^|/)SCPH|^generated/' <<<"${LIST}"; then
+            echo "::error::kit contains disc/BIOS/save data or generated game C"; exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: carnageheart-setup-${{ matrix.artifact }}
+          path: dist/carnageheart-setup-*-${{ matrix.artifact }}.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: github.event_name == 'push' || github.event.inputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VER="${{ github.event.inputs.version }}"
+          [[ -z "${VER}" && "${GITHUB_REF_TYPE}" == tag ]] && VER="${GITHUB_REF_NAME}"
+          [[ -z "${VER}" ]] && VER="$(tr -d '[:space:]' < VERSION)"
+          TAG="v${VER#v}"
+          gh release create "${TAG}" dist/*.zip --target "${GITHUB_SHA}" \
+            --title "Carnage Heart Recompiled ${TAG}" \
+            --notes "Unzip, put your Carnage Heart (USA) .cue + .bin beside CarnageHeart_Recompiled.exe and run it. The first launch builds the game on your PC (needs internet once for the compiler pack); after that it opens straight to the game." \
+            || gh release upload "${TAG}" dist/*.zip --clobber

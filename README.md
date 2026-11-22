@@ -24,7 +24,18 @@ This repository contains **no game data and no recompiled game code**. You gener
 ## Status
 
 - Linux x64: boots on the bundled OpenBIOS (no Sony BIOS needed), reaches the title screen and the campaign.
-- **PlayStation Mouse support restored.** The USA release had its mouse code removed; it is put back from *Carnage Heart EZ* (Japan) in `src/mouse_pad_hle.c`. Left click confirms and right click goes back (the USA button roles, not EZ's), menus follow the pointer and click the item under it, and the cursor no longer snaps to the centre of menu boxes. Pointer/touch control in a normal window is in progress.
+- **PlayStation Mouse support restored.** The USA release had its mouse code removed; it is put back from *Carnage Heart EZ* (Japan) in `src/mouse_pad_hle.c`. Left click confirms and right click goes back (the USA button roles, not EZ's), menus follow the pointer and click the item under it, and the cursor no longer snaps to the centre of menu boxes. You don't need a PS1 Mouse: in a normal window the pointer or a touch screen drives the cursor while your pad keeps working.
+
+### Mouse and touch controls
+
+| Input | Does |
+|---|---|
+| Move the pointer | Moves the game's cursor (the pad takes over again as soon as you press a pad button) |
+| Left click / tap | Cross (confirm) on the item under the pointer |
+| Right click / long press | Opens a small labelled menu at the pointer: Triangle, Square, Start, Select, L1, R1, L2, R2, Back. Pick one to press it on the item you right-clicked; click anywhere else to close |
+| Double right click / two-finger tap | Circle (back) |
+
+Pointer mode is off during netplay. Set `CH_POINTER=0` to turn it off.
 
 ## Play on Windows (setup kit)
 

@@ -90,7 +90,9 @@ if(PSX_RECOMP_UI)
     endif()
 endif()
 
-# PlayStation Mouse support restored from Carnage Heart EZ (src/mouse_pad_hle.c).
+# PlayStation Mouse support restored from Carnage Heart EZ (src/mouse_pad_hle.c),
+# plus window pointer / touch control and the right-click button menu
+# (src/pointer_menu.c; CH_POINTER=0 at run time turns that off).
 # HLE = mouse restored; LLE = original USA controller routine.
 set(CH_MOUSE_IMPL "HLE" CACHE STRING "HLE (mouse restored) or LLE (original)")
 set(_ch_mouse_targets psx-runtime)
@@ -107,6 +109,7 @@ psxrecomp_select_guest_implementation(
     GENERATED_SOURCES ${_ch_game_shards}
     SYMBOLS func_8003E154 func_8003E89C
     HLE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/mouse_pad_hle.c"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/pointer_menu.c"
     REFERENCE_PREFIX ch_mouse_lle_
     SNAPSHOT_TAG 0x43484D31)
 endif()
@@ -114,6 +117,7 @@ endif()
 option(CH_MOUSE_SELFTEST "Fake PS1 Mouse from CH_MOUSE_SELFTEST_FILE (testing only)" OFF)
 if(CH_MOUSE_SELFTEST)
     set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/mouse_pad_hle.c"
+                                "${CMAKE_CURRENT_SOURCE_DIR}/src/pointer_menu.c"
         TARGET_DIRECTORY ${_ch_mouse_targets}
         PROPERTIES COMPILE_DEFINITIONS CH_MOUSE_SELFTEST=1)
 endif()

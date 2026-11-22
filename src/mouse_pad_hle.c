@@ -7,9 +7,13 @@
  * MAIN.EXE at 0x80042168 with the same variable layout (EZ: flag 0x800CC6D0,
  * cursor 0x800CC6E0/E4). This replacement is the USA routine with EZ's mouse
  * branch restored, translated to USA addresses. Non-mouse controllers behave
- * exactly as the original USA code. */
+ * exactly as the original USA code.
+ *
+ * With a normal pad on port 1, the window pointer and touch screen drive the
+ * same cursor alongside the pad (src/pointer_menu.c). */
 #include <stdint.h>
 #include "cpu_state.h"
+#include "pointer_menu.h"
 
 #ifdef CH_MOUSE_SELFTEST
 /* Test-only: fake a PS1 Mouse on port 1. Each line appended to the file named
@@ -37,6 +41,10 @@ static int selftest_report(uint8_t out[6]) {
 #define CURSOR_X      0x800DF368u /* 16..495 */
 #define CURSOR_Y      0x800DF36Cu /* 8..231 */
 
+/* Set when the pad takes over from the pointer; the hotspot navigator then
+ * moves the cursor onto a box once (see func_8003E89C). */
+static int nav_resnap;
+
 static int32_t ez_signed_x(uint8_t b) { return b < 0x81 ? (int32_t)b : -(int32_t)(uint8_t)~b; }
 static int32_t ez_signed_y(uint8_t b) { return b < 0x81 ? (int32_t)(b >> 1) : -(int32_t)((b >> 1) ^ 0x7F); }
 
@@ -49,7 +57,33 @@ void func_8003E154(CPUState *cpu)
     uint32_t buttons = cpu->read_word(PAD_BUTTONS);
     cpu->write_word(PAD_PREV, buttons);
 
-    if ((type & 0xF0u) == 0x10u && cpu->read_word(MOUSE_MODE) != 0) {
+    const int real_mouse = (type & 0xF0u) == 0x10u;
+    if (!real_mouse && ch_pointer_enabled()) {
+        /* Host pointer mode (src/pointer_menu.c): the pad on port 1 keeps all
+         * its buttons, and the window pointer or touch drives the game's own
+         * mouse cursor. Whichever was used last decides the mode: moving or
+         * clicking the pointer turns mouse mode on (free cursor, click acts on
+         * the box under it); a new pad press turns it off, so the D-pad jumps
+         * between boxes as on the original. */
+        static uint32_t prev_pad;
+        static int pointer_mode;
+        uint8_t b2 = cpu->read_byte(PAD1_BUF + 2), b3 = cpu->read_byte(PAD1_BUF + 3);
+        uint32_t pad = (((uint32_t)b2 << 8) ^ 0xFF00u) + (uint8_t)~b3;
+        ChPointerFrame pf;
+        ch_pointer_frame(&pf);
+        if (pf.activity) pointer_mode = 1;
+        if ((pad & ~prev_pad) && pointer_mode) { pointer_mode = 0; nav_resnap = 1; }
+        prev_pad = pad;
+        buttons = pad | pf.buttons;
+        cpu->write_word(PAD_BUTTONS, buttons);
+        cpu->write_word(MOUSE_MODE, pointer_mode ? 1u : 0u);
+        if (pointer_mode) {
+            cpu->write_word(CURSOR_X, (uint32_t)pf.x);
+            cpu->write_word(CURSOR_Y, (uint32_t)pf.y);
+        } else {
+            cpu->write_word(cpu->gpr[28] + 0xC10u, 0);
+        }
+    } else if (real_mouse && cpu->read_word(MOUSE_MODE) != 0) {
         /* EZ maps left -> 0x20 (Circle) and right -> 0x40 (Cross), because in
          * the Japanese release Circle confirms. The USA release swapped the
          * roles (Cross 0x40 confirms, Circle 0x20 backs out), including in the
@@ -133,6 +167,31 @@ void func_8003E89C(CPUState *cpu)
             }
         }
 #endif
+    }
+    if (fresh && !nav_pending && nav_resnap) {
+        nav_resnap = 0;
+        /* Pad mode after the pointer was used: the cursor may sit outside
+         * every box (the D-pad can only move from a box it is on), so put it
+         * on the centre of the nearest box first. Only once, right after the
+         * switch, so screens with a free D-pad cursor are left alone. */
+        const int32_t ox = (int32_t)cpu->gpr[4], oy = (int32_t)cpu->gpr[5];
+        const int32_t cx = (int32_t)cpu->read_word(CURSOR_X), cy = (int32_t)cpu->read_word(CURSOR_Y);
+        const uint32_t t = cpu->gpr[6];
+        int inside = 0, have = 0; int64_t best = 0; int32_t bx = 0, by = 0;
+        for (int k = 0; k < 64; ++k) {
+            const uint32_t e = t + (uint32_t)k * 0x12u;
+            if (!cpu->read_half(e)) break;
+            const int32_t x = ox + cpu->read_half(e + 2), y = oy + cpu->read_half(e + 4);
+            const int32_t w = cpu->read_half(e + 6), h = cpu->read_half(e + 8);
+            if (cx >= x && cx < x + w && cy >= y && cy < y + h) { inside = 1; break; }
+            const int32_t mx = x + w / 2, my = y + h / 2;
+            const int64_t d = (int64_t)(mx - cx) * (mx - cx) + (int64_t)(my - cy) * (my - cy);
+            if (!have || d < best) { have = 1; best = d; bx = mx; by = my; }
+        }
+        if (!inside && have) {
+            cpu->write_word(CURSOR_X, (uint32_t)bx);
+            cpu->write_word(CURSOR_Y, (uint32_t)by);
+        }
     }
     ch_mouse_lle_func_8003E89C(cpu);
     if (nav_pending && cpu->pc == nav_ra) {

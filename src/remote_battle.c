@@ -27,6 +27,9 @@
  *   CH_REMOTE_FRESH=0         keep the OKEs' current HP/ammo instead of
  *                             setting fresh values from the design (the
  *                             default, needed while the map OKEs are CPU ones)
+ *   CH_HOTSEAT=1              hot-seat (hotseat.c): every battle uses the
+ *                             waiting side's own designs (by each OKE's card
+ *                             index) and keeps the OKEs' HP and ammo
  * Details: docs/research/VS_MODE_AND_SAVES.md
  */
 #include <stdint.h>
@@ -54,6 +57,10 @@ void ch_remote_lle_func_8001CF48(CPUState *cpu);
 void ch_remote_lle_func_80035CD4(CPUState *cpu);
 void ch_remote_lle_func_80035988(CPUState *cpu);
 
+/* Hot-seat (hotseat.c): side 2's OKEs use the waiting side's own designs. */
+int ch_hotseat_active(void);
+const uint8_t *ch_hotseat_other_card(int idx);
+
 static int g_enabled = -1;
 static int g_fresh = 1;
 static int g_design_count;
@@ -72,6 +79,14 @@ static void load_config(void)
     g_enabled = (e && *e == '1');
     e = getenv("CH_REMOTE_FRESH");
     g_fresh = !(e && *e == '0');
+    if (ch_hotseat_active()) {
+        /* Designs come from the waiting side's card table; the OKEs already
+         * carry their own HP and ammo. */
+        g_enabled = 1;
+        g_fresh = 0;
+        fprintf(stderr, "[remote-battle] on (hot-seat designs)\n");
+        return;
+    }
     if (!g_enabled)
         return;
     e = getenv("CH_REMOTE_DESIGNS");
@@ -134,6 +149,7 @@ void func_80035CD4(CPUState *cpu)
     }
 
     int16_t *oke2 = g_oke2;
+    const int hotseat = ch_hotseat_active();
     int slot_of_design[MAX_DESIGNS];
     g_nborrowed = 0;
     for (int d = 0; d < MAX_DESIGNS; d++) slot_of_design[d] = -1;
@@ -144,7 +160,11 @@ void func_80035CD4(CPUState *cpu)
         const uint32_t o = okes + oke2[s] * OKE_SIZE;
         read_block(cpu, o, g_saved_oke[s], OKE_SIZE);
 
-        const int d = s % g_design_count;
+        /* Hot-seat: the OKE's own card index in the waiting side's table.
+         * Otherwise: the test designs, round robin. */
+        const int d = hotseat ? (g_saved_oke[s][3] % MAX_DESIGNS) : s % g_design_count;
+        const uint8_t *design = hotseat ? ch_hotseat_other_card(d) : g_designs[d];
+        if (!design) { oke2[s] = -1; continue; }
         if (slot_of_design[d] < 0) {
             int slot = -1;
             for (int c = CARD_SLOTS - 1; c >= 0; c--)
@@ -153,7 +173,7 @@ void func_80035CD4(CPUState *cpu)
             used[slot] = 1;
             g_borrowed[g_nborrowed] = slot;
             read_block(cpu, cards + slot * CARD_SIZE, g_saved_card[g_nborrowed], CARD_SIZE);
-            write_block(cpu, cards + slot * CARD_SIZE, g_designs[d], CARD_SIZE);
+            write_block(cpu, cards + slot * CARD_SIZE, design, CARD_SIZE);
             g_nborrowed++;
             slot_of_design[d] = slot;
         }
@@ -162,7 +182,7 @@ void func_80035CD4(CPUState *cpu)
         cpu->write_byte(o + 3, (uint8_t)slot);  /* card index */
         if (g_fresh) {
             /* Same values the game gives a newly built player OKE (0x8005B118). */
-            const uint8_t *c = g_designs[d];
+            const uint8_t *c = design;
             cpu->write_half(o + 4, 0);                               /* kills */
             cpu->write_half(o + 6, (uint16_t)(c[52] | (c[53] << 8))); /* HP */
             cpu->write_half(o + 8, c[54]);

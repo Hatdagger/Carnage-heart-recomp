@@ -1,6 +1,6 @@
 # Carnage Heart ReComp: Multiplayer Plan
 
-Researched 2026-11-21, updated 2026-11-22 after the campaign RAM mapping and the VS/saves mapping (see [CAMPAIGN_RAM_MAP.md](CAMPAIGN_RAM_MAP.md) and [VS_MODE_AND_SAVES.md](VS_MODE_AND_SAVES.md)).
+Researched 2026-11-21, updated 2026-11-22 after the campaign RAM mapping, the VS/saves mapping and the hot-seat test (see [CAMPAIGN_RAM_MAP.md](CAMPAIGN_RAM_MAP.md) and [VS_MODE_AND_SAVES.md](VS_MODE_AND_SAVES.md)).
 
 **Priority (decided 2026-11-21): campaign versus (Option C) comes first.** VS mode (Options A and B) is less important and comes later.
 
@@ -51,6 +51,29 @@ What was found:
 
 **Built (2026-11-22): `src/remote_battle.c`** (`-DCH_REMOTE_BATTLE=ON`). It borrows spare card slots for the remote designs during the battle, runs it in VS mode, then puts the remote OKEs back on side 2 and restores the cards. Tested both ways round (CPU side attacking, player attacking), including remote survivors. Next: drive it from the turn file instead of test switches.
 
+### Hot-seat: built and tested (2026-11-22, step 4)
+**`src/hotseat.c`** (same `-DCH_REMOTE_BATTLE=ON` build; run with `CH_HOTSEAT=1`). Two people share one copy and take turns; each always plays "as the player", and the sides are swapped in RAM at the end of every turn, so the game's own screens, movement, battles and win/lose code serve whoever's turn it is.
+
+How End Turn runs with hot-seat on:
+1. The current side's units move and fight (the game's own loop). Battles against the other side's units are fought with that side's own designs (`remote_battle.c` borrows them from the waiting side's card table).
+2. The CPU brain `0x8001C268` is skipped, and the waiting side's units are hidden from the CPU-unit loop (owner byte set to 0 for the loop) so they do not move on the other side's turn.
+3. The rest of End Turn runs as usual. It is written for "player" and "CPU" and would also touch the waiting side with CPU rules: base repair (`0x8007654C`) caps HP at the CPU card's value, and research/negotiation (`0x8004BBB8`) spends the CPU funds. So the waiting side's units, bases, OKEs and funds are **snapshotted when the brain would run and put back just before the swap**. Each side gets base fuel, repair, resupply and production once a round, on its own turn.
+4. **Swap** at `0x8008A2B8` (called only from End Turn, after the bases are counted, before the win/lose check): units i <-> i+32, owner bytes 1 <-> 2 in units, bases and OKEs, funds (gp+52 <-> gp+56), the player card table (the waiting side's designs are kept in the module) and the selected base. The turn number goes up once a round. If either side has no bases left there is no swap, so the win or lose screens are shown to the side that just played.
+
+Set-up (first End Turn): side B gets a copy of side A's card table, the CPU's OKEs become side-B OKEs built from the stock designs MACHINE01-03 (cards 25-27, fresh HP and ammo), side B's funds are set to side A's, and the CPU bases' production lines are cleared.
+
+Tested at Europa (Practice), all orders given through the game's own screens:
+- Swap: B gets its bases, its 8 OKEs at full HP (520), 500000 funds and the camera on its base. B formed a unit (Form Unit, Auto) and ordered Capture on A's base; it moved one hex per B turn and stood still on A's turns.
+- Battle: A formed a unit and ordered Defend. On A's turn 4 A's defender went out to meet B's attacker; the battle was fought with B's designs on side 2. B won 3 kills to 0 (one B OKE lost, two left at 179 and 276 HP). The game removed A's unit and B's dead OKE; B's unit marched on.
+- End: in a second game B walked onto A's undefended base, A's stored OKEs were dismantled, all bases went to B and the victory screen played for B.
+
+Found on the way:
+- **Skipping a function**: calls are continuation-passing. A hook that does not run the original must still "return" by setting `cpu->pc = cpu->gpr[31]`; without it the game exits (PC = 0).
+- The normal End Turn finishes right after the base count (the code after it is the map-won path: `0x80036C70` sets up the next map).
+- **Known gaps** (fine for a local test; the turn files will replace this): research/negotiation still runs for the CPU every End Turn (only the waiting side's funds are protected); kills and losses of the waiting side's OKEs are added to the CPU card records; the hot-seat state lives in the module, so savestates and save files do not carry it (restart the game before loading a savestate from before set-up).
+
+What this means for step 5: the turn file can be written at the swap point. Everything the swap moves (units, bases, OKEs, funds, designs) is exactly what the other device needs, and the snapshot/restore shows which parts of End Turn belong to the side that just played.
+
 ### Saves and memory cards: mapped (2026-11-22)
 A campaign save is one 5-block file whose body is a straight copy of the campaign tables in RAM (cards, units, bases, OKEs, globals). No checksum found. A single design is one 1152-byte record at a known offset. See VS_MODE_AND_SAVES.md.
 
@@ -74,7 +97,7 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 1. ~~Campaign RAM map~~ (done 2026-11-22).
 2. ~~Map VS mode and saves; build and test remote-player battles~~ (done 2026-11-22, `src/remote_battle.c`).
 3. ~~Map the player order screens (including re-orders) and factory data~~ (done 2026-11-22).
-4. Local hot-seat test on one machine: end turn, swap sides, play the other side.
+4. ~~Local hot-seat test on one machine: end turn, swap sides, play the other side~~ (done 2026-11-22, `src/hotseat.c`).
 5. Turn files: capture orders and battle results on one copy, replay them on a second copy.
 6. Storage, then notifications (desktop, then Android).
 7. Later: Options A and B (the card and save layout they need is now mapped).

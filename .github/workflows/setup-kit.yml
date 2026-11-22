@@ -19,6 +19,8 @@ on:
         default: true
   push:
     tags: ['v*']
+    # Test builds (no release) from work branches.
+    branches: ['setup-kit-*']
 
 permissions:
   contents: write
@@ -151,7 +153,7 @@ jobs:
 
   release:
     needs: build
-    if: github.event_name == 'push' || github.event.inputs.publish == 'true'
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

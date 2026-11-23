@@ -115,7 +115,8 @@ psxrecomp_select_guest_implementation(
 endif()
 # Remote-player battles (multiplayer groundwork, off by default): campaign
 # battles against another player's designs, fought the way VS mode does.
-# Run-time switches are described in src/remote_battle.c, src/hotseat.c and
+# Run-time switches are described in src/remote_battle.c, src/hotseat.c,
+# src/turn_files.c and
 # docs/research/VS_MODE_AND_SAVES.md.
 option(CH_REMOTE_BATTLE "Remote-player battle support (multiplayer groundwork)" OFF)
 if(CH_REMOTE_BATTLE AND _ch_game_shards AND NOT PSXRECOMP_FORCE_SETUP_HOST)
@@ -127,6 +128,7 @@ psxrecomp_select_guest_implementation(
             func_8001B8EC func_8001C268 func_8001BCB0 func_8008A2B8
     HLE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/remote_battle.c"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/hotseat.c"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/turn_files.c"
     REFERENCE_PREFIX ch_remote_lle_
     SNAPSHOT_TAG 0x43485243)
 endif()

@@ -1,4 +1,5 @@
-"""Tiny driver for the Carnage Heart recomp debug server (port 4370)."""
+"""Tiny driver for the Carnage Heart recomp debug server (port 4370, or CH_PORT;
+set ch.PORT to talk to another copy)."""
 import os
 REPO = os.environ.get('CH_REPO', os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')))
 OUT = os.environ.get('CH_OUT', os.path.join(REPO, 'build', 'research'))
@@ -11,10 +12,11 @@ BTN = dict(select=0x0001, start=0x0008, up=0x0010, right=0x0020, down=0x0040,
            left=0x0080, l2=0x0100, r2=0x0200, l1=0x0400, r1=0x0800,
            tri=0x1000, circle=0x2000, x=0x4000, square=0x8000)
 _s = None
+PORT = int(os.environ.get('CH_PORT', '4370'))
 
 
 def cmd(**kw):
-    s = dc.connect(port=4370, timeout=60)
+    s = dc.connect(port=PORT, timeout=60)
     try:
         return dc.send_cmd(s, kw)
     finally:

@@ -1,0 +1,529 @@
+/*
+ * Turn files: campaign versus between two copies of the game (multiplayer
+ * plan step 5; built with -DCH_REMOTE_BATTLE=ON, switched on at run time
+ * with CH_TURN_DIR).
+ *
+ * This builds on hot-seat (hotseat.c). Each player has their own copy and
+ * always plays "as the player". Turns alternate strictly: A1, B1, A2, B2...
+ * End Turn on a copy runs only that player's half, exactly as in hot-seat
+ * (their units move and fight with the opponent's real designs; the CPU
+ * brain is skipped; the waiting side is snapshotted and put back). Then, at
+ * the point where hot-seat would swap the sides (0x8008A2B8):
+ *
+ *   1. SEND: the state after my half is written to a turn file, already
+ *      turned round to the receiver's point of view (units i <-> i+32,
+ *      owner bytes 1 <-> 2 in units, bases and OKEs, the two funds swapped),
+ *      together with my design cards, the orders I gave this turn and the
+ *      results of the battles I fought.
+ *   2. WAIT for the opponent's next turn file to appear.
+ *   3. LOAD it: its tables are written straight into RAM (they are already
+ *      in my point of view), its design cards become "the other side's
+ *      designs" for my next battles, and the turn counters are set.
+ *   End Turn then goes on as usual (win/lose check, back to the map).
+ *
+ * The state in a turn file is authoritative: the receiver does not replay
+ * the sender's turn, it takes the result. So the two copies cannot drift
+ * apart, and a battle is only ever fought once, on the device of the player
+ * whose unit moved (who watches it). The orders and battle results are in
+ * the file too, for the "what happened" log now and for a visual replay
+ * later.
+ *
+ * Transport (until step 6 adds online storage): a shared folder. Turn N is
+ * <CH_TURN_DIR>/turn-NNNNNN.cht. A writes the odd numbers, B the even ones.
+ *
+ * Run-time switches:
+ *   CH_TURN_DIR=<folder>   the shared folder (turns this mode on)
+ *   CH_TURN_ROLE=A|B       which player this copy is (default A)
+ *
+ * Starting and resuming: the first End Turn of a session only RECEIVES,
+ * unless this is player A and the folder is empty (a new game: A plays and
+ * sends turn 1). During a receive-only End Turn the player's own units are
+ * held still, nothing is sent, and the newest state from the opponent is
+ * loaded. So player B starts by pressing End Turn once, and either player
+ * can close the game, start the same scenario again (loading their own save
+ * gets their designs back) and press End Turn to catch up.
+ *
+ * File layout (version 1, little-endian), 48-byte header then the body:
+ *    0  4  "CHTF"
+ *    4  2  version (1)
+ *    6  1  sender role (0 = A, 1 = B)
+ *    7  1  flags (bit 0: game over after this turn)
+ *    8  4  sequence number (A odd, B even, from 1)
+ *   12  4  turn counter for the receiver (0x800DF37C)
+ *   16  4  second turn counter for the receiver (0x800DF380)
+ *   20  8  hash of the previous turn file's tables (0 for turn 1)
+ *   28  8  hash of this file's tables
+ *   36  8  hash of the whole body
+ *   44  4  body length
+ *   body:  tables  = receiver funds (4), sender funds (4), units 64 x 22,
+ *                    bases 16 x 92, OKEs 200 x 12 (receiver's point of view)
+ *          sender's design cards, 28 x 1152
+ *          order count (1), orders x 8: unit slot, kind (1 formed, 2 new
+ *              order, 3 unit gone), task, 0, target cell (2), home cell (2)
+ *          battle count (1), battles x 42: side-1 unit, side-2 unit (both
+ *              in the sender's numbering), x (2), y (2), then for the 6 OKEs
+ *              (side 1 then side 2): OKE index, HP, kills (2 each; -1 index
+ *              for an empty slot)
+ *
+ * The previous-tables hash links the files into a chain: each file says
+ * which state it was played from, and the receiver checks that it is the
+ * state it sent. A mismatch is logged as a desync, and the new state is
+ * still loaded (it is authoritative), which puts both copies back in step.
+ */
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <time.h>
+#endif
+#include "cpu_state.h"
+
+#define GP_TURN         0x800DF37Cu
+#define GP_TURN2        0x800DF380u
+#define GP_FUNDS_PLAYER 0x800DF38Cu
+#define GP_FUNDS_CPU    0x800DF390u
+#define GP_CUR_BASE     0x800DF404u
+#define PTR_OKE_TABLE   0x800E014Cu
+#define PTR_BASE_TABLE  0x800E0154u
+#define PTR_UNIT_TABLE  0x800E017Cu
+#define CARD_SIZE       1152u
+#define CARD_SLOTS      28
+#define OKE_SIZE        12u
+#define OKE_COUNT       200
+#define BASE_SIZE       92u
+#define BASE_COUNT      16
+#define UNIT_SIZE       22u
+#define UNIT_COUNT      64
+
+#define TF_VERSION      1
+#define TF_HEADER       48u
+#define TF_TABLES       (8u + UNIT_COUNT * UNIT_SIZE + BASE_COUNT * BASE_SIZE + OKE_COUNT * OKE_SIZE)
+#define TF_CARDS        (CARD_SLOTS * CARD_SIZE)
+#define TF_ORDER_SIZE   8u
+#define TF_BATTLE_SIZE  42u
+#define TF_MAX_ORDERS   64
+#define TF_MAX_BATTLES  64
+#define TF_MAX_BODY     (TF_TABLES + TF_CARDS + 1u + TF_MAX_ORDERS * TF_ORDER_SIZE + \
+                         1u + TF_MAX_BATTLES * TF_BATTLE_SIZE)
+
+/* From hotseat.c: the waiting side's design cards (28 x 1152, flat). */
+uint8_t *ch_hotseat_other_cards(void);
+
+static int g_on = -1;
+static char g_dir[512];
+static int g_role;                /* 0 = A, 1 = B */
+static int g_synced;              /* a turn file has been loaded (or A sent turn 1) */
+static int g_receive_only;        /* this End Turn only receives */
+static uint32_t g_next_send;      /* sequence number of my next turn file */
+static uint64_t g_prev_hash;      /* tables hash of the last file loaded */
+
+/* My units at the start of my turn, for working out the orders I gave. */
+static uint8_t g_start_units[32][UNIT_SIZE];
+static int g_have_start;
+static uint8_t g_held_owner[32];  /* my units, held still in a receive-only End Turn */
+static int g_held;
+
+static uint8_t g_orders[TF_MAX_ORDERS][TF_ORDER_SIZE];
+static int g_norders;
+static uint8_t g_battles[TF_MAX_BATTLES][TF_BATTLE_SIZE];
+static int g_nbattles;
+
+static uint8_t g_buf[TF_HEADER + TF_MAX_BODY];
+
+int ch_turns_active(void)
+{
+    if (g_on < 0) {
+        const char *d = getenv("CH_TURN_DIR");
+        const char *r = getenv("CH_TURN_ROLE");
+        g_on = (d && *d);
+        if (g_on) {
+            snprintf(g_dir, sizeof g_dir, "%s", d);
+            g_role = (r && (*r == 'B' || *r == 'b' || *r == '2')) ? 1 : 0;
+            fprintf(stderr, "[turns] on: player %c, folder %s\n", g_role ? 'B' : 'A', g_dir);
+        }
+    }
+    return g_on;
+}
+
+/* ---- little helpers ---------------------------------------------------- */
+
+static void sleep_ms(int ms)
+{
+#ifdef _WIN32
+    Sleep((DWORD)ms);
+#else
+    struct timespec ts = { ms / 1000, (long)(ms % 1000) * 1000000L };
+    nanosleep(&ts, NULL);
+#endif
+}
+
+static uint64_t fnv1a(const uint8_t *p, size_t n)
+{
+    uint64_t h = 0xcbf29ce484222325ull;
+    for (size_t i = 0; i < n; i++) { h ^= p[i]; h *= 0x100000001b3ull; }
+    return h;
+}
+
+static void put16(uint8_t *p, uint16_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); }
+static void put32(uint8_t *p, uint32_t v) { put16(p, (uint16_t)v); put16(p + 2, (uint16_t)(v >> 16)); }
+static void put64(uint8_t *p, uint64_t v) { put32(p, (uint32_t)v); put32(p + 4, (uint32_t)(v >> 32)); }
+static uint16_t get16(const uint8_t *p) { return (uint16_t)(p[0] | (p[1] << 8)); }
+static uint32_t get32(const uint8_t *p) { return get16(p) | ((uint32_t)get16(p + 2) << 16); }
+static uint64_t get64(const uint8_t *p) { return get32(p) | ((uint64_t)get32(p + 4) << 32); }
+
+static void rd(CPUState *cpu, uint32_t a, uint8_t *d, uint32_t n)
+{ for (uint32_t i = 0; i < n; i++) d[i] = cpu->read_byte(a + i); }
+static void wr(CPUState *cpu, uint32_t a, const uint8_t *s, uint32_t n)
+{ for (uint32_t i = 0; i < n; i++) cpu->write_byte(a + i, s[i]); }
+
+static uint8_t swap_owner(uint8_t o) { return o == 1 ? 2 : o == 2 ? 1 : o; }
+
+static void path_for(char *out, size_t n, uint32_t seq)
+{
+    snprintf(out, n, "%s/turn-%06u.cht", g_dir, (unsigned)seq);
+}
+
+static int seq_exists(uint32_t seq)
+{
+    char p[600];
+    path_for(p, sizeof p, seq);
+    FILE *f = fopen(p, "rb");
+    if (f) fclose(f);
+    return f != NULL;
+}
+
+static int seq_is_mine(uint32_t seq) { return (int)((seq & 1u) == 0) == g_role; }
+
+/* Turn files are numbered 1, 2, 3... with no gaps. */
+static uint32_t latest_seq(int mine_only)
+{
+    uint32_t best = 0;
+    for (uint32_t s = 1; seq_exists(s); s++)
+        if (!mine_only || seq_is_mine(s)) best = s;
+    return best;
+}
+
+/* ---- orders and battles ------------------------------------------------ */
+
+static void capture_start(CPUState *cpu)
+{
+    const uint32_t units = cpu->read_word(PTR_UNIT_TABLE);
+    for (int i = 0; i < 32; i++)
+        rd(cpu, units + i * UNIT_SIZE, g_start_units[i], UNIT_SIZE);
+    g_have_start = 1;
+}
+
+/* Compare my units with how they were at the start of my turn. Every order
+ * screen writes only task (+01), target (+06) and home (+08), and Form Unit
+ * fills an empty slot, so the differences are the orders. */
+static void capture_orders(CPUState *cpu)
+{
+    const uint32_t units = cpu->read_word(PTR_UNIT_TABLE);
+    g_norders = 0;
+    for (int i = 0; i < 32 && g_norders < TF_MAX_ORDERS; i++) {
+        uint8_t u[UNIT_SIZE];
+        rd(cpu, units + i * UNIT_SIZE, u, UNIT_SIZE);
+        const uint8_t *s = g_start_units[i];
+        const int was = g_have_start && s[0] == 1, now = u[0] == 1;
+        int kind = 0;
+        if (now && !was) kind = 1;
+        else if (now && (u[1] != s[1] || get16(u + 6) != get16(s + 6) || get16(u + 8) != get16(s + 8)))
+            kind = 2;
+        else if (!now && was) kind = 3;
+        if (!kind) continue;
+        uint8_t *o = g_orders[g_norders++];
+        o[0] = (uint8_t)i; o[1] = (uint8_t)kind; o[2] = u[1]; o[3] = 0;
+        put16(o + 4, get16(u + 6));
+        put16(o + 6, get16(u + 8));
+    }
+}
+
+/* Called by remote_battle.c when a battle is over, before the game's result
+ * code removes destroyed OKEs. unit1 is the moving player's side (side 1). */
+void ch_turns_note_battle(CPUState *cpu, uint32_t unit1, uint32_t unit2)
+{
+    if (!ch_turns_active() || g_nbattles >= TF_MAX_BATTLES)
+        return;
+    const uint32_t units = cpu->read_word(PTR_UNIT_TABLE);
+    const uint32_t okes  = cpu->read_word(PTR_OKE_TABLE);
+    uint8_t *b = g_battles[g_nbattles++];
+    const uint32_t u2 = units + unit2 * UNIT_SIZE;
+    b[0] = (uint8_t)unit1;
+    b[1] = (uint8_t)unit2;
+    put16(b + 2, cpu->read_half(u2 + 2));
+    put16(b + 4, cpu->read_half(u2 + 4));
+    for (int side = 0; side < 2; side++) {
+        const uint32_t u = units + (side ? unit2 : unit1) * UNIT_SIZE;
+        for (int s = 0; s < 3; s++) {
+            uint8_t *e = b + 6 + (side * 3 + s) * 6;
+            const int16_t k = (int16_t)cpu->read_half(u + 0x0C + 2 * s);
+            put16(e, (uint16_t)k);
+            put16(e + 2, k < 0 ? 0 : cpu->read_half(okes + k * OKE_SIZE + 6));
+            put16(e + 4, k < 0 ? 0 : cpu->read_half(okes + k * OKE_SIZE + 4));
+        }
+    }
+}
+
+/* ---- End Turn hooks (called from hotseat.c) ---------------------------- */
+
+/* Start of End Turn (fresh call, after hot-seat set-up). */
+void ch_turns_begin(CPUState *cpu)
+{
+    if (!g_synced) {
+        if (g_role == 0 && latest_seq(0) == 0) {
+            g_receive_only = 0;     /* new game: A plays and sends turn 1 */
+            g_next_send = 1;
+            g_prev_hash = 0;
+            fprintf(stderr, "[turns] new game: player A plays turn 1\n");
+        } else {
+            g_receive_only = 1;
+        }
+    }
+    g_nbattles = 0;
+    g_norders = 0;
+    if (g_receive_only) {
+        /* Hold my units still: the units loop skips owner 0. Put back (or
+         * overwritten by the loaded state) at the swap point. */
+        const uint32_t units = cpu->read_word(PTR_UNIT_TABLE);
+        for (int i = 0; i < 32; i++) {
+            g_held_owner[i] = cpu->read_byte(units + i * UNIT_SIZE);
+            cpu->write_byte(units + i * UNIT_SIZE, 0);
+        }
+        g_held = 1;
+        fprintf(stderr, "[turns] this End Turn only receives the opponent's turn\n");
+    } else {
+        capture_orders(cpu);
+    }
+}
+
+static size_t build_file(CPUState *cpu, int game_over)
+{
+    const uint32_t units = cpu->read_word(PTR_UNIT_TABLE);
+    const uint32_t bases = cpu->read_word(PTR_BASE_TABLE);
+    const uint32_t okes  = cpu->read_word(PTR_OKE_TABLE);
+    uint8_t *h = g_buf, *body = g_buf + TF_HEADER, *p = body;
+
+    /* Tables, turned round to the receiver's point of view. */
+    put32(p, cpu->read_word(GP_FUNDS_CPU)); p += 4;     /* receiver's own funds */
+    put32(p, cpu->read_word(GP_FUNDS_PLAYER)); p += 4;  /* sender's funds */
+    for (int i = 0; i < UNIT_COUNT; i++, p += UNIT_SIZE) {
+        rd(cpu, units + ((i + 32) % UNIT_COUNT) * UNIT_SIZE, p, UNIT_SIZE);
+        p[0] = swap_owner(p[0]);
+    }
+    for (int i = 0; i < BASE_COUNT; i++, p += BASE_SIZE) {
+        rd(cpu, bases + i * BASE_SIZE, p, BASE_SIZE);
+        p[0] = swap_owner(p[0]);
+    }
+    for (int i = 0; i < OKE_COUNT; i++, p += OKE_SIZE) {
+        rd(cpu, okes + i * OKE_SIZE, p, OKE_SIZE);
+        p[0] = swap_owner(p[0]);
+    }
+    const uint64_t tables_hash = fnv1a(body, TF_TABLES);
+
+    /* My designs: the receiver fights my OKEs with them. */
+    const uint32_t cards = cpu->read_word(0x800E0014u);
+    rd(cpu, cards, p, TF_CARDS); p += TF_CARDS;
+
+    *p++ = (uint8_t)g_norders;
+    for (int i = 0; i < g_norders; i++, p += TF_ORDER_SIZE) memcpy(p, g_orders[i], TF_ORDER_SIZE);
+    *p++ = (uint8_t)g_nbattles;
+    for (int i = 0; i < g_nbattles; i++, p += TF_BATTLE_SIZE) memcpy(p, g_battles[i], TF_BATTLE_SIZE);
+    const uint32_t body_len = (uint32_t)(p - body);
+
+    /* The game counted the turn at the start of End Turn. A's turn n and B's
+     * turn n make one round: B plays the same number A just played, and A
+     * then plays the next one. */
+    const uint32_t back = g_role == 0 ? 1u : 0u;
+    memcpy(h, "CHTF", 4);
+    put16(h + 4, TF_VERSION);
+    h[6] = (uint8_t)g_role;
+    h[7] = (uint8_t)(game_over ? 1 : 0);
+    put32(h + 8, g_next_send);
+    put32(h + 12, cpu->read_word(GP_TURN) - back);
+    put32(h + 16, cpu->read_word(GP_TURN2) - back);
+    put64(h + 20, g_prev_hash);
+    put64(h + 28, tables_hash);
+    put64(h + 36, fnv1a(body, body_len));
+    put32(h + 44, body_len);
+    return TF_HEADER + body_len;
+}
+
+static int send_file(CPUState *cpu, int game_over)
+{
+    char path[600], tmp[620];
+    const size_t n = build_file(cpu, game_over);
+    path_for(path, sizeof path, g_next_send);
+    snprintf(tmp, sizeof tmp, "%s.part", path);
+    FILE *f = fopen(tmp, "wb");
+    if (!f || fwrite(g_buf, 1, n, f) != n) {
+        if (f) fclose(f);
+        fprintf(stderr, "[turns] ERROR: could not write %s\n", tmp);
+        return 0;
+    }
+    fclose(f);
+    remove(path);                 /* rename does not replace on Windows */
+    if (rename(tmp, path) != 0) {
+        fprintf(stderr, "[turns] ERROR: could not rename %s to %s\n", tmp, path);
+        return 0;
+    }
+    fprintf(stderr, "[turns] sent turn file %u (%u order(s), %u battle(s)%s), %zu bytes\n",
+            (unsigned)g_next_send, (unsigned)g_norders, (unsigned)g_nbattles,
+            game_over ? ", game over" : "", n);
+    return 1;
+}
+
+/* Read and check turn file seq into g_buf. Returns the body length, or 0. */
+static uint32_t read_file(uint32_t seq)
+{
+    char path[600];
+    path_for(path, sizeof path, seq);
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    const size_t n = fread(g_buf, 1, sizeof g_buf, f);
+    fclose(f);
+    if (n < TF_HEADER || memcmp(g_buf, "CHTF", 4) != 0 || get16(g_buf + 4) != TF_VERSION) {
+        fprintf(stderr, "[turns] ERROR: %s is not a version-%d turn file\n", path, TF_VERSION);
+        return 0;
+    }
+    const uint32_t len = get32(g_buf + 44);
+    if (get32(g_buf + 8) != seq || len < TF_TABLES + TF_CARDS + 2u || n != TF_HEADER + len ||
+        fnv1a(g_buf + TF_HEADER, len) != get64(g_buf + 36)) {
+        fprintf(stderr, "[turns] ERROR: %s is damaged or incomplete\n", path);
+        return 0;
+    }
+    if (g_buf[6] != (seq & 1u ? 0 : 1)) {
+        fprintf(stderr, "[turns] ERROR: %s was written by the wrong player\n", path);
+        return 0;
+    }
+    return len;
+}
+
+/* Tables hash of an earlier turn file (0 if it is not there). */
+static uint64_t tables_hash_of(uint32_t seq)
+{
+    if (seq == 0) return 0;
+    char path[600];
+    uint8_t h[TF_HEADER];
+    path_for(path, sizeof path, seq);
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    const size_t n = fread(h, 1, TF_HEADER, f);
+    fclose(f);
+    return n == TF_HEADER ? get64(h + 28) : 0;
+}
+
+static void log_what_happened(const uint8_t *orders, int norders, const uint8_t *battles, int nbattles)
+{
+    static const char *task[] = { "standby", "move", "defend a base", "capture a base", "patrol" };
+    for (int i = 0; i < norders; i++) {
+        const uint8_t *o = orders + i * TF_ORDER_SIZE;
+        const unsigned their = o[0] + 32u;   /* their slot i is my i + 32 */
+        if (o[1] == 3) { fprintf(stderr, "[turns]  their unit %u: gone\n", their); continue; }
+        fprintf(stderr, "[turns]  their unit %u: %s, %s, target cell %u\n", their,
+                o[1] == 1 ? "formed" : "new order", o[2] < 5 ? task[o[2]] : "?", get16(o + 4));
+    }
+    for (int i = 0; i < nbattles; i++) {
+        const uint8_t *b = battles + i * TF_BATTLE_SIZE;
+        fprintf(stderr, "[turns]  battle at (%d,%d): their unit %u attacked your unit %u.",
+                (int16_t)get16(b + 2), (int16_t)get16(b + 4), b[0] + 32u, (unsigned)b[1] - 32u);
+        for (int side = 0; side < 2; side++) {
+            fprintf(stderr, side ? " Yours:" : " Theirs:");
+            for (int s = 0; s < 3; s++) {
+                const uint8_t *e = b + 6 + (side * 3 + s) * 6;
+                if ((int16_t)get16(e) < 0) continue;
+                fprintf(stderr, " %dHP", (int16_t)get16(e + 2));
+            }
+        }
+        fprintf(stderr, "\n");
+    }
+}
+
+/* Write a checked turn file (in g_buf) into RAM. Returns its game-over flag. */
+static int load_file(CPUState *cpu, uint32_t seq, uint32_t len)
+{
+    const uint32_t units = cpu->read_word(PTR_UNIT_TABLE);
+    const uint32_t bases = cpu->read_word(PTR_BASE_TABLE);
+    const uint32_t okes  = cpu->read_word(PTR_OKE_TABLE);
+    const uint8_t *h = g_buf, *p = g_buf + TF_HEADER, *end = p + len;
+
+    /* Chain check: was it played from the state I sent? */
+    const uint64_t mine = tables_hash_of(seq - 1);
+    if (seq > 1 && mine && get64(h + 20) != mine)
+        fprintf(stderr, "[turns] DESYNC: turn file %u was not played from turn file %u; "
+                "loading it anyway (it is the opponent's real state)\n", (unsigned)seq, (unsigned)(seq - 1));
+    g_prev_hash = get64(h + 28);
+
+    cpu->write_word(GP_FUNDS_PLAYER, get32(p)); p += 4;
+    cpu->write_word(GP_FUNDS_CPU, get32(p)); p += 4;
+    wr(cpu, units, p, UNIT_COUNT * UNIT_SIZE); p += UNIT_COUNT * UNIT_SIZE;
+    wr(cpu, bases, p, BASE_COUNT * BASE_SIZE); p += BASE_COUNT * BASE_SIZE;
+    wr(cpu, okes, p, OKE_COUNT * OKE_SIZE); p += OKE_COUNT * OKE_SIZE;
+    memcpy(ch_hotseat_other_cards(), p, TF_CARDS); p += TF_CARDS;
+    cpu->write_word(GP_TURN, get32(h + 12));
+    cpu->write_word(GP_TURN2, get32(h + 16));
+
+    /* Keep the selected base on one of mine. */
+    const uint32_t cur = cpu->read_word(GP_CUR_BASE);
+    if (cur >= BASE_COUNT || cpu->read_byte(bases + cur * BASE_SIZE) != 1)
+        for (uint32_t b = 0; b < BASE_COUNT; b++)
+            if (cpu->read_byte(bases + b * BASE_SIZE) == 1) { cpu->write_word(GP_CUR_BASE, b); break; }
+
+    int norders = 0, nbattles = 0;
+    const uint8_t *orders = NULL, *battles = NULL;
+    if (p < end) { norders = *p++; orders = p; p += norders * TF_ORDER_SIZE; }
+    if (p < end) { nbattles = *p++; battles = p; p += nbattles * TF_BATTLE_SIZE; }
+    if (p > end) norders = nbattles = 0;
+    fprintf(stderr, "[turns] loaded turn file %u: turn %u, funds %u (opponent %u)%s\n",
+            (unsigned)seq, cpu->read_word(GP_TURN), cpu->read_word(GP_FUNDS_PLAYER),
+            cpu->read_word(GP_FUNDS_CPU), (h[7] & 1) ? ", game over" : "");
+    log_what_happened(orders, norders, battles, nbattles);
+    return h[7] & 1;
+}
+
+static int wait_and_load(CPUState *cpu, uint32_t seq)
+{
+    uint32_t len;
+    int waited = 0;
+    fprintf(stderr, "[turns] waiting for turn file %u from player %c\n",
+            (unsigned)seq, seq & 1u ? 'A' : 'B');
+    /* The game is paused here until the file arrives. */
+    while ((len = read_file(seq)) == 0) {
+        sleep_ms(500);
+        if (++waited % 60 == 0)
+            fprintf(stderr, "[turns] still waiting for turn file %u\n", (unsigned)seq);
+    }
+    return load_file(cpu, seq, len);
+}
+
+/* Where hot-seat would swap the sides. The waiting side has been put back.
+ * Returns 1 if the game is over (no swap and no more turns). */
+int ch_turns_swap_point(CPUState *cpu, int game_over)
+{
+    uint32_t want;
+    if (g_held) {
+        const uint32_t units = cpu->read_word(PTR_UNIT_TABLE);
+        for (int i = 0; i < 32; i++) cpu->write_byte(units + i * UNIT_SIZE, g_held_owner[i]);
+        g_held = 0;
+    }
+    if (g_receive_only) {
+        /* Catch up: the opponent's turn after my newest one. */
+        want = latest_seq(1) + 1;
+    } else {
+        send_file(cpu, game_over);
+        if (game_over) {
+            g_synced = 0;
+            return 1;
+        }
+        want = g_next_send + 1;
+    }
+    const int over = wait_and_load(cpu, want);
+    g_next_send = want + 1;
+    g_synced = 1;
+    g_receive_only = 0;
+    capture_start(cpu);
+    if (over) g_synced = 0;
+    return over;
+}

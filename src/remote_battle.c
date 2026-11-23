@@ -60,12 +60,15 @@ void ch_remote_lle_func_80035988(CPUState *cpu);
 /* Hot-seat (hotseat.c): side 2's OKEs use the waiting side's own designs. */
 int ch_hotseat_active(void);
 const uint8_t *ch_hotseat_other_card(int idx);
+/* Turn files (turn_files.c): record the result for the turn file. */
+void ch_turns_note_battle(CPUState *cpu, uint32_t unit1, uint32_t unit2);
 
 static int g_enabled = -1;
 static int g_fresh = 1;
 static int g_design_count;
 static uint8_t g_designs[MAX_DESIGNS][CARD_SIZE];
 static int g_active;               /* a remote battle is in progress */
+static uint32_t g_unit1, g_unit2;  /* the two units in it */
 
 /* What to put back when the battle is over. */
 static int16_t g_oke2[3];
@@ -196,6 +199,8 @@ void func_80035CD4(CPUState *cpu)
     /* The battle runs over the following frames; func_80035CD4 can return to
      * us before it is fought. The "after" step runs from the result code
      * (func_80035988), which the game calls once the battle is over. */
+    g_unit1 = unit1;
+    g_unit2 = unit2;
     g_active = 1;
     ch_remote_lle_func_80035CD4(cpu);
 }
@@ -216,6 +221,7 @@ static void finish_remote_battle(CPUState *cpu)
     }
     for (int i = 0; i < g_nborrowed; i++)
         write_block(cpu, cards + g_borrowed[i] * CARD_SIZE, g_saved_card[i], CARD_SIZE);
+    ch_turns_note_battle(cpu, g_unit1, g_unit2);
     g_active = 0;
 }
 

@@ -38,6 +38,10 @@
  * funds are set to side A's, and the CPU bases' production lines are
  * cleared.
  *
+ * Turn files (turn_files.c, CH_TURN_DIR): the same machinery between two
+ * copies of the game. At the swap point, instead of swapping, this copy
+ * sends the state after its half and loads the opponent's next turn.
+ *
  * Known gaps (fine for a local test, to fix for turn files):
  *   - research and negotiation (0x8004BBB8, not mapped yet) run for the
  *     CPU on every End Turn; only the waiting side's funds are protected;
@@ -76,6 +80,11 @@ void ch_remote_lle_func_8001C268(CPUState *cpu);
 void ch_remote_lle_func_8001BCB0(CPUState *cpu);
 void ch_remote_lle_func_8008A2B8(CPUState *cpu);
 
+/* turn_files.c */
+int ch_turns_active(void);
+void ch_turns_begin(CPUState *cpu);
+int ch_turns_swap_point(CPUState *cpu, int game_over);
+
 static int g_on = -1;
 static int g_ready;          /* set-up done */
 static int g_side;           /* 0: side A is "the player", 1: side B */
@@ -94,8 +103,8 @@ int ch_hotseat_active(void)
 {
     if (g_on < 0) {
         const char *e = getenv("CH_HOTSEAT");
-        g_on = (e && *e == '1');
-        if (g_on) fprintf(stderr, "[hotseat] on\n");
+        g_on = (e && *e == '1') || ch_turns_active();
+        if (g_on) fprintf(stderr, "[hotseat] on%s\n", ch_turns_active() ? " (turn files)" : "");
     }
     return g_on;
 }
@@ -103,6 +112,11 @@ int ch_hotseat_active(void)
 const uint8_t *ch_hotseat_other_card(int idx)
 {
     return (idx >= 0 && idx < CARD_SLOTS) ? g_other_cards[idx] : NULL;
+}
+
+uint8_t *ch_hotseat_other_cards(void)
+{
+    return &g_other_cards[0][0];
 }
 
 static void rd(CPUState *cpu, uint32_t a, uint8_t *d, uint32_t n)
@@ -259,8 +273,12 @@ static void swap_sides(CPUState *cpu)
 /* End Turn: set up on the first one. */
 void func_8001B8EC(CPUState *cpu)
 {
-    if (cpu->pc == 0 && ch_hotseat_active() && !g_ready)
-        setup(cpu);
+    if (cpu->pc == 0 && ch_hotseat_active()) {
+        if (!g_ready)
+            setup(cpu);
+        if (ch_turns_active())
+            ch_turns_begin(cpu);
+    }
     ch_remote_lle_func_8001B8EC(cpu);
 }
 
@@ -318,7 +336,15 @@ void func_8008A2B8(CPUState *cpu)
             mine += (o == 1);
             theirs += (o == 2);
         }
-        if (mine && theirs) {
+        if (ch_turns_active()) {
+            /* Two copies: send my half, load the opponent's (turn_files.c). */
+            if (g_snapped)
+                restore_waiting_side(cpu);
+            if (ch_turns_swap_point(cpu, !(mine && theirs))) {
+                fprintf(stderr, "[hotseat] game over\n");
+                g_ready = 0;
+            }
+        } else if (mine && theirs) {
             swap_sides(cpu);
         } else {
             if (g_snapped)

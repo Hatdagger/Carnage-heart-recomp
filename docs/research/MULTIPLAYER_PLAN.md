@@ -199,15 +199,15 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 ## Session status (chat B, 2026-11-24, session 4)
 **Done**
 - Launcher shows each online game's scenario (commit 1e51af8 on `research/vs-battle-and-saves`): "SCENARIO: ..." on the game page, "START ..." in the games list, from byte 48/49 of the newest turn file. Tested with `launcher_shots/run.sh` (new step with a Ganymede map 2 turn file).
-- Walked the owner through the Cloudflare relay setup (`relay/README.md`).
+- Owner set up the relay on Cloudflare: **`https://ch-turns.surreal64.workers.dev`**. It is now the launcher's built-in default (`CH_TURN_RELAY_URL` in `cmake/ch_launcher_menu.cmake`, commit 76941cf).
 
 **Next**
-- Owner: finish the relay setup and send the address; then the real online test (`CH_RELAY_URL=<address> python3 tools/research/online_demo.py`) and building the address in (`-DCH_TURN_RELAY_URL=`). The online test also needs the disc image attached (the game code is generated from it).
+- Real online test against that relay (`CH_RELAY_URL=https://ch-turns.surreal64.workers.dev python3 tools/research/online_demo.py`). This sandbox's network proxy refuses workers.dev (HTTP 403), so it needs the domain allowed for the session (claude.ai Settings > Capabilities) or a run on the owner's PC; it also needs the disc image (the game code is generated from it).
 - Android notifications after chat C has an APK.
 - Release builds need `-DCH_REMOTE_BATTLE=ON` for the Online Campaign entry to work.
 
 **Blocked**
-- Real relay test: waiting for the relay address and the disc image.
+- Real relay test: this sandbox can't reach workers.dev, and the disc image is not attached yet.
 
 ## Session status (chat B, 2026-11-24, session 3)
 **Done**

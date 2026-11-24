@@ -167,6 +167,61 @@ jobs:
           path: dist/carnageheart-setup-*-${{ matrix.artifact }}.zip
           if-no-files-found: error
 
+      # Steam Deck / any Linux: the Linux kit as one AppImage
+      # (packaging/appimage/AppRun copies it to a writable folder and runs it).
+      - name: Build AppImage (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          curl -fsSL -o appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          ZIP=$(ls dist/carnageheart-setup-*-linux-x64.zip | head -1)
+          APPIMAGE_EXTRACT_AND_RUN=1 bash scripts/package_appimage.sh "${ZIP}" "$PWD/appimagetool"
+          ls -la dist/*.AppImage
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: carnageheart-appimage
+          path: dist/*.AppImage
+          if-no-files-found: error
+
+  # SteamOS is Arch-based: open the AppImage in an Arch container with the
+  # libraries SteamOS ships, check the launcher finds every library it needs,
+  # and run AppRun's first-start install (copy + disc link) with a fake disc.
+  steamos-check:
+    needs: build
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: carnageheart-appimage
+          path: appimage
+      - name: SteamOS-like libraries
+        run: |
+          pacman -Syu --noconfirm --needed mesa libglvnd libx11 libxext libxcursor libxrandr \
+            libxi libxfixes libxss libxkbcommon libxcb freetype2 libpng openssl brotli \
+            bzip2 zlib libbsd alsa-lib libpulse systemd-libs python curl unzip
+      - name: Libraries and first start
+        run: |
+          set -euo pipefail
+          AI=$(ls appimage/*.AppImage | head -1); chmod +x "${AI}"
+          mkdir deck && cp "${AI}" deck/CarnageHeart.AppImage && cd deck
+          ./CarnageHeart.AppImage --appimage-extract >/dev/null
+          KIT=squashfs-root/usr/share/carnageheart/kit
+          MISSING="$(ldd "${KIT}/CarnageHeart_Recompiled" | grep 'not found' || true)"
+          if [[ -n "${MISSING}" ]]; then echo "${MISSING}"; echo "::error::launcher needs libraries SteamOS lacks"; exit 1; fi
+          printf 'FILE "Carnage Heart (USA) (Track 1).bin" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n' > "Carnage Heart (USA).cue"
+          : > "Carnage Heart (USA) (Track 1).bin"
+          DIR="$(APPIMAGE="$PWD/CarnageHeart.AppImage" CH_APPIMAGE_INSTALL_ONLY=1 sh squashfs-root/AppRun)"
+          test -x "${DIR}/CarnageHeart_Recompiled"
+          test -L "${DIR}/disc/Carnage Heart (USA).cue"
+          test -L "${DIR}/disc/Carnage Heart (USA) (Track 1).bin"
+          test -f "${DIR}/psxrecomp/psxrecomp_cli.py"
+          echo "installed into ${DIR}, disc linked"
+
   # Player's first run on a clean Windows PC (no MSYS2 on PATH): unzip the kit
   # and run the same toolchain + emitter build the setup wizard runs, so a
   # failure shows its real compiler output here instead of "exit 1".
@@ -223,7 +278,7 @@ jobs:
           [[ -z "${VER}" && "${GITHUB_REF_TYPE}" == tag ]] && VER="${GITHUB_REF_NAME}"
           [[ -z "${VER}" ]] && VER="$(tr -d '[:space:]' < VERSION)"
           TAG="v${VER#v}"
-          gh release create "${TAG}" dist/*.zip --target "${GITHUB_SHA}" \
+          gh release create "${TAG}" dist/*.zip dist/*.AppImage --target "${GITHUB_SHA}" \
             --title "Carnage Heart Recompiled ${TAG}" \
-            --notes "Unzip, put your Carnage Heart (USA) .cue + .bin beside CarnageHeart_Recompiled.exe and run it. The first launch builds the game on your PC (needs internet once for the compiler pack); after that it opens straight to the game." \
-            || gh release upload "${TAG}" dist/*.zip --clobber
+            --notes "Windows: unzip, put your Carnage Heart (USA) .cue + .bin beside CarnageHeart_Recompiled.exe and run it. Steam Deck / Linux: put the .AppImage and your .cue + .bin in one folder and run the AppImage (it installs into a CarnageHeart folder beside it). The first launch builds the game on your machine (needs internet once for the compiler pack); after that it opens straight to the game." \
+            || gh release upload "${TAG}" dist/*.zip dist/*.AppImage --clobber

@@ -34,6 +34,7 @@ This repository contains **no game data and no recompiled game code**. You gener
 | Left click / tap | Cross (confirm) on the item under the pointer |
 | Right click / long press | Opens a small menu at the pointer with the buttons a mouse lacks. On menu screens it lists only the buttons that do something there and says what they do (for example "SELECT: QUIT GAME", "L2: NEXT BASE", "R2: CHIP LIST" on the chip program grid, "L2: NEXT OKE" in battle); **MORE BUTTONS** shows the full list (Triangle, Square, Start, Select, L1, R1, L2, R2). Pick one to press it on the item you right-clicked; click anywhere else to close |
 | Double right click / two-finger tap | Circle (back) |
+| Mouse wheel | On the chip program grid: scrolls the grid up and down (half a row per notch). Shift + wheel, a sideways wheel or a sideways touchpad swipe scrolls left and right |
 
 <p align="center">
   <img src="docs/screenshots/right-click-menu-base.png" alt="Right-click menu on the base screen, listing Select: Quit Game and L2: Next Base" width="400">
@@ -48,6 +49,15 @@ This repository contains **no game data and no recompiled game code**. You gener
 </p>
 
 Which buttons each menu screen uses comes from a scan of the game's code (`tools/scan_screens.py`, table in `src/screen_labels.c`), checked in the game. In battles the menu offers **L2: NEXT OKE** (camera to the next OKE), **SETTINGS** (display, speed and camera) and **OKE STATUS** (test battles) or **NEXT OKE** (other battles). As in *Carnage Heart EZ*, while you use the mouse a battle takes left click for OKE status / next OKE and double right click for settings, in place of Start and Select. Any other screen shows the full list.
+
+While you use the mouse, the game also switches on the mouse layout that *Carnage Heart EZ* used and the USA release left switched off: menus stop jumping between items, and the base screen's minimap becomes clickable (pointing marks the hex under the cursor, the round arrows turn the view, **MAP** opens the full map). The game's own arrow cursor is hidden while you use the mouse or touch screen (your normal pointer already shows where you are); it comes back with a pad or a real PS1 Mouse. Press a pad button and the pad layout comes back.
+
+<p align="center">
+  <img src="docs/screenshots/base-minimap-pointer.png" alt="Base screen: pointing at the minimap highlights the hex under the cursor" width="400">
+</p>
+<p align="center">
+  <img src="docs/screenshots/chip-grid-wheel-scroll.png" alt="Chip program grid before and after four mouse-wheel notches down" width="640">
+</p>
 
 Pointer mode is off during netplay. Set `CH_POINTER=0` to turn it off.
 

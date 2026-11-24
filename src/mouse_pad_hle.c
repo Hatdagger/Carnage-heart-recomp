@@ -41,10 +41,14 @@ static int selftest_report(uint8_t out[6]) {
 #define REPEAT_FLAG   0x800DF364u
 #define CURSOR_X      0x800DF368u /* 16..495 */
 #define CURSOR_Y      0x800DF36Cu /* 8..231 */
+/* (gp + 0xC10 = 0x800DFF68: menus' mouse-UI flag, see the pointer branch.) */
 
 /* Set when the pad takes over from the pointer; the hotspot navigator then
  * moves the cursor onto a box once (see func_8003E89C). */
 static int nav_resnap;
+/* 1 while the window pointer / touch drives the cursor (host pointer mode).
+ * The game's own arrow is hidden then (see func_8003E4C8). */
+static int pointer_mode;
 
 /* PadRead count, and the return address of the latest HotspotNavigate /
  * HotspotDrawHitTest call with the PadRead count it was seen at. The menu
@@ -89,7 +93,6 @@ void func_8003E154(CPUState *cpu)
          * the box under it); a new pad press turns it off, so the D-pad jumps
          * between boxes as on the original. */
         static uint32_t prev_pad;
-        static int pointer_mode;
         uint8_t b2 = cpu->read_byte(PAD1_BUF + 2), b3 = cpu->read_byte(PAD1_BUF + 3);
         uint32_t pad = (((uint32_t)b2 << 8) ^ 0xFF00u) + (uint8_t)~b3;
         ChPointerFrame pf;
@@ -100,13 +103,19 @@ void func_8003E154(CPUState *cpu)
         buttons = pad | pf.buttons;
         cpu->write_word(PAD_BUTTONS, buttons);
         cpu->write_word(MOUSE_MODE, pointer_mode ? 1u : 0u);
+        /* gp+0xC10 (0x800DFF68) is the menus' "mouse UI" flag: about 65 screens
+         * read it. When set they use a free cursor instead of jumping between
+         * boxes, and some show extra mouse-only boxes, e.g. the base screen's
+         * minimap (click a cell), its rotate arrows and its MAP button (table
+         * 0x800BB930 instead of 0x800BB8D4). The USA pad routine only ever
+         * clears it; EZ's mouse support set it. */
+        cpu->write_word(cpu->gpr[28] + 0xC10u, pointer_mode ? 1u : 0u);
         if (pointer_mode) {
             cpu->write_word(CURSOR_X, (uint32_t)pf.x);
             cpu->write_word(CURSOR_Y, (uint32_t)pf.y);
-        } else {
-            cpu->write_word(cpu->gpr[28] + 0xC10u, 0);
         }
     } else if (real_mouse && cpu->read_word(MOUSE_MODE) != 0) {
+        pointer_mode = 0;
         /* EZ maps left -> 0x20 (Circle) and right -> 0x40 (Cross), because in
          * the Japanese release Circle confirms. The USA release swapped the
          * roles (Cross 0x40 confirms, Circle 0x20 backs out), including in the
@@ -124,6 +133,7 @@ void func_8003E154(CPUState *cpu)
         cpu->write_word(MOUSE_MODE, (type & 0x10u) ? 1u : 0u);
     } else if (cpu->read_word(MOUSE_MODE) == 0) {
         /* Original USA digital path. */
+        pointer_mode = 0;
         uint8_t b2 = cpu->read_byte(PAD1_BUF + 2), b3 = cpu->read_byte(PAD1_BUF + 3);
         buttons = (((uint32_t)b2 << 8) ^ 0xFF00u) + (uint8_t)~b3;
         cpu->write_word(PAD_BUTTONS, buttons);
@@ -245,4 +255,20 @@ void func_8001FB04(CPUState *cpu)
 {
     if (cpu->pc == 0u || cpu->pc == 0x8001FB04u) battle_seen = pad_reads;
     ch_mouse_lle_func_8001FB04(cpu);
+}
+
+/* Cursor draw (USA 0x8003E4C8, EZ 0x80042510): draws the game's arrow at the
+ * cursor. In host pointer mode the system pointer already shows where you
+ * point, so the arrow would be a second, slightly late cursor: skip it. A
+ * real PS1 Mouse (captured pointer) and the pad still get the arrow. */
+void ch_mouse_lle_func_8003E4C8(CPUState *cpu);
+
+void func_8003E4C8(CPUState *cpu)
+{
+    const int fresh = (cpu->pc == 0u || cpu->pc == 0x8003E4C8u);
+    if (fresh && pointer_mode && cpu->read_word(MOUSE_MODE) != 0) {
+        cpu->pc = cpu->gpr[31]; /* jr $ra: nothing drawn */
+        return;
+    }
+    ch_mouse_lle_func_8003E4C8(cpu);
 }

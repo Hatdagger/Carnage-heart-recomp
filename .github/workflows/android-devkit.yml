@@ -34,7 +34,7 @@ jobs:
           set -euo pipefail
           SDK="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
           SDKM="$SDK/cmdline-tools/latest/bin/sdkmanager"
-          yes | "$SDKM" --install "ndk;${{ inputs.ndk || '27.3.13750724' }}" "build-tools;35.0.0" "platforms;android-35" > /dev/null
+          (yes || true) | "$SDKM" --install "ndk;${{ inputs.ndk || '27.3.13750724' }}" "build-tools;35.0.0" "platforms;android-35" > /dev/null
           echo "SDK=$SDK" >> "$GITHUB_ENV"
 
       - name: Pack

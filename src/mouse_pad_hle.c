@@ -41,6 +41,7 @@ static int selftest_report(uint8_t out[6]) {
 #define REPEAT_FLAG   0x800DF364u
 #define CURSOR_X      0x800DF368u /* 16..495 */
 #define CURSOR_Y      0x800DF36Cu /* 8..231 */
+/* (gp + 0xC10 = 0x800DFF68: menus' mouse-UI flag, see the pointer branch.) */
 
 /* Set when the pad takes over from the pointer; the hotspot navigator then
  * moves the cursor onto a box once (see func_8003E89C). */
@@ -100,11 +101,16 @@ void func_8003E154(CPUState *cpu)
         buttons = pad | pf.buttons;
         cpu->write_word(PAD_BUTTONS, buttons);
         cpu->write_word(MOUSE_MODE, pointer_mode ? 1u : 0u);
+        /* gp+0xC10 (0x800DFF68) is the menus' "mouse UI" flag: about 65 screens
+         * read it. When set they use a free cursor instead of jumping between
+         * boxes, and some show extra mouse-only boxes, e.g. the base screen's
+         * minimap (click a cell), its rotate arrows and its MAP button (table
+         * 0x800BB930 instead of 0x800BB8D4). The USA pad routine only ever
+         * clears it; EZ's mouse support set it. */
+        cpu->write_word(cpu->gpr[28] + 0xC10u, pointer_mode ? 1u : 0u);
         if (pointer_mode) {
             cpu->write_word(CURSOR_X, (uint32_t)pf.x);
             cpu->write_word(CURSOR_Y, (uint32_t)pf.y);
-        } else {
-            cpu->write_word(cpu->gpr[28] + 0xC10u, 0);
         }
     } else if (real_mouse && cpu->read_word(MOUSE_MODE) != 0) {
         /* EZ maps left -> 0x20 (Circle) and right -> 0x40 (Cross), because in

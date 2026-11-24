@@ -38,12 +38,31 @@ dirs = {}
 
 
 def post(url):
-    req = urllib.request.Request(url, data=b'', method='POST')
+    # Cloudflare refuses Python's default User-Agent (error 1010).
+    req = urllib.request.Request(url, data=b'', method='POST',
+                                 headers={'User-Agent': 'CarnageHeart-Test'})
     return json.load(urllib.request.urlopen(req, timeout=10))
+
+
+def port_free(port, wait=30):
+    """Wait until the debug port can be bound again (a copy that was just
+    closed can hold it for a moment; the new copy's server then fails)."""
+    import socket
+    end = time.time() + wait
+    while time.time() < end:
+        s = socket.socket()
+        try:
+            s.bind(('127.0.0.1', port))
+            return
+        except OSError:
+            time.sleep(0.5)
+        finally:
+            s.close()
 
 
 def start(p, game, key, folder, tag):
     """Start copy p (A or B) on its own folder and memory cards."""
+    port_free(PORTS[p])
     logs[p] = os.path.join(OUT, '%s-%s.log' % (p, tag))
     env = dict(os.environ, PSX_DEBUG_SERVER='1', CH_TURN_RELAY=RELAY, CH_TURN_GAME=game,
                CH_TURN_KEY=key, CH_TURN_ROLE=p, CH_TURN_DIR=folder)

@@ -145,7 +145,7 @@ So nobody needs the "press End Turn once to catch up" step any more, and orders 
 - Simulator (`tools/research/turnsim/run.sh`, now with a map-start step): straight game; B restarts at the start of its turn (caught up when the map opens); B closes right after sending (its own file comes back, the next End Turn waits); online through the local relay, then B on a new computer (turn files 1-7 fetched from the relay). All checks pass.
 - **Real game, two copies, separate folders, local relay** (`tools/research/online_demo.py`): both map starts; B closed at the start of its turn and started again: the map caught up with turn file 3 without an End Turn and **all units, bases, OKEs and funds were byte-for-byte what B had before closing**; the same from an empty folder (all three files from the relay); B closed right after sending turn 4: its own state came back exactly and the next End Turn waited for A's turn 5; then played on to B's victory and A's defeat. No desyncs.
 - Launcher pages: drawn and driven with key presses through the real menu code against the local relay (`tools/research/launcher_shots/run.sh`, which draws the pages in software since this sandbox has no screen): create, PLAY (sets the switches and launches), join by typing and with the arrows, wrong code, a third player, game over, forget.
-- Not tested: the launcher in a real window (no screen here) and a real Cloudflare relay.
+- Not tested: the launcher in a real window (no screen here). (The real Cloudflare relay was tested on 2026-11-24, session 4.)
 
 Known gaps:
 - ~~The map start does not check which scenario was started~~ (done, step 6d below).
@@ -192,22 +192,24 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 3. ~~Map the player order screens (including re-orders) and factory data~~ (done 2026-11-22).
 4. ~~Local hot-seat test on one machine: end turn, swap sides, play the other side~~ (done 2026-11-22, `src/hotseat.c`).
 5. ~~Turn files: capture orders and battle results on one copy, apply them on a second copy~~ (done 2026-11-22, `src/turn_files.c`; tested in the real game 2026-11-23).
-6. ~~Waiting without freezing the game~~ and ~~storage: the turn relay~~ (done 2026-11-23). ~~Launcher Online screen, closing after sending, catching up on start (also from the relay on a new device), desktop "your turn" check~~ (done 2026-11-24). ~~Scenario check~~ (done 2026-11-24). Next: a real relay test, then Android notifications.
+6. ~~Waiting without freezing the game~~ and ~~storage: the turn relay~~ (done 2026-11-23). ~~Launcher Online screen, closing after sending, catching up on start (also from the relay on a new device), desktop "your turn" check~~ (done 2026-11-24). ~~Scenario check~~ (done 2026-11-24). ~~Real relay test~~ (done 2026-11-24, session 4). Next: Android notifications.
 7. Optional: visual replay of the enemy's turn from the orders in the file.
 8. Later: Options A and B (the card and save layout they need is now mapped).
 
 ## Session status (chat B, 2026-11-24, session 4)
 **Done**
 - Launcher shows each online game's scenario (commit 1e51af8 on `research/vs-battle-and-saves`): "SCENARIO: ..." on the game page, "START ..." in the games list, from byte 48/49 of the newest turn file. Tested with `launcher_shots/run.sh` (new step with a Ganymede map 2 turn file).
-- Owner set up the relay on Cloudflare: **`https://ch-turns.surreal64.workers.dev`**. It is now the launcher's built-in default (`CH_TURN_RELAY_URL` in `cmake/ch_launcher_menu.cmake`, commit 76941cf).
+- Owner set up the relay on Cloudflare: **`https://ch-turns.surreal64.workers.dev`** (KV namespace `ch-turns`, binding `TURNS`). It is now the launcher's built-in default (`CH_TURN_RELAY_URL` in `cmake/ch_launcher_menu.cmake`, commit 76941cf).
+- **Real relay test passed** (`CH_RELAY_URL=https://ch-turns.surreal64.workers.dev python3 tools/research/online_demo.py`): two real copies, separate folders, game B8J7-RH2W, all five checks (map starts, restart catch-up, empty folder from the relay, close after sending, game over), no desyncs; the relay ended with 10 turn files. Screenshots `docs/screenshots/online-real-relay-victory.png` / `-defeat.png`.
+- Found on the way: Cloudflare refuses Python's default User-Agent (error 1010, HTTP 403); curl's is accepted, so the game and launcher are fine. `online_demo.py` now sends its own User-Agent and waits for a closed copy's debug port to be free before starting the next.
+- A first try failed with "relay error" (HTTP 500): the KV binding had been made as `KV` instead of `TURNS`. Worth a line in `relay/README.md` (done).
 
 **Next**
-- Real online test against that relay (`CH_RELAY_URL=https://ch-turns.surreal64.workers.dev python3 tools/research/online_demo.py`). This sandbox's network proxy refuses workers.dev (HTTP 403), so it needs the domain allowed for the session (claude.ai Settings > Capabilities) or a run on the owner's PC; it also needs the disc image (the game code is generated from it).
 - Android notifications after chat C has an APK.
 - Release builds need `-DCH_REMOTE_BATTLE=ON` for the Online Campaign entry to work.
 
 **Blocked**
-- Real relay test: this sandbox can't reach workers.dev, and the disc image is not attached yet.
+- Nothing for chat B now; Android notifications wait for chat C's APK.
 
 ## Session status (chat B, 2026-11-24, session 3)
 **Done**

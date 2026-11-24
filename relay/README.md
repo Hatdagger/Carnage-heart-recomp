@@ -9,6 +9,7 @@ Cloudflare moves its menus around now and then; if a name below differs a little
 3. **The relay**: open *Compute (Workers)* → *Workers & Pages* → *Create* → *Create Worker* (the "Hello World" one). Name it `ch-turns` and press *Deploy*.
 4. Press *Edit code*, delete everything in `worker.js` there, paste the whole of this folder's `worker.js`, and press *Deploy*.
 5. Connect the storage: on the worker's page open *Bindings* → *Add binding* → *KV namespace*. Variable name `TURNS`, namespace `ch-turns`. Save (it redeploys).
+   If creating a game later fails with `{"error":"relay error"}`, this binding is missing or has another name (Cloudflare's example code uses `KV`); it must be `TURNS`.
 6. The worker's page shows its address, like `https://ch-turns.<your-name>.workers.dev`. That is the relay address the game needs. Opening it in a browser shows `{"error":"not found"}`: that means it works.
 
 The free plan allows 1,000 stored turn files a day and 100,000 reads a day, far more than a few games need. Games are deleted 180 days after their last turn.
@@ -47,3 +48,5 @@ The full API is described at the top of `worker.js`.
 - `node relay/test.mjs`: checks the relay's rules (keys, no gaps, no rewrites, size limit).
 - `node relay/dev_server.mjs 8787`: runs the relay on this PC with the storage in memory; point `CH_TURN_RELAY` at `http://127.0.0.1:8787`.
 - `sh tools/research/turnsim/run.sh` includes an online game through the local relay.
+
+Cloudflare refuses requests with Python's default User-Agent (error 1010). curl's is fine; a script talking to the relay should set its own User-Agent.

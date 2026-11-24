@@ -25,6 +25,7 @@
 #include <unistd.h>
 
 int ch_android_real_main(int argc, char *argv[]);
+void ch_android_watch_start(void);
 
 /* The OpenGL renderer (translated to GLES 3.1+, ch_android_gles.c) needs an
  * OpenGL ES 3.1+ context and GL_EXT_blend_func_extended (dual-source
@@ -214,6 +215,10 @@ int SDL_main(int argc, char *argv[])
            gpu ? "OpenGL ES (" : "software (native resolution)",
            gpu ? scale : "",
            gpu ? " internal resolution, render thread on, vsync off / pacer only)" : "");
+
+    /* Test 8: cores, clock, run/wait, thermal and hot guest code every 2 s
+     * (ch_android_watch.c), to explain the 40 fps still-screen slowdown. */
+    ch_android_watch_start();
 
     int rc = ch_android_real_main(argc, args);
     printf("Carnage Heart (Android): main returned %d\n", rc);

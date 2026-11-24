@@ -222,6 +222,59 @@ jobs:
           test -f "${DIR}/psxrecomp/psxrecomp_cli.py"
           echo "installed into ${DIR}, disc linked"
 
+  # The Deck builds the game itself on first start. SteamOS ships no dev
+  # headers, so this builds the launcher from the installed kit in a bare
+  # Arch container (no X11 / audio / GL packages) the way a player's machine
+  # does: the portable compiler pack, its sysroot and its prebuilt SDL3
+  # (static; loads X11, ALSA, PulseAudio and udev at run time). The game
+  # itself needs the disc, so the setup host stands in for it: same SDL,
+  # runtime and launcher.
+  steamos-build:
+    needs: build
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: carnageheart-appimage
+          path: appimage
+      - name: Bare SteamOS-like system (no dev packages)
+        run: pacman -Syu --noconfirm --needed python curl unzip
+      - name: Install from the AppImage, get the compiler pack, build
+        run: |
+          set -euo pipefail
+          AI=$(ls appimage/*.AppImage | head -1); chmod +x "${AI}"
+          mkdir deck && cp "${AI}" deck/CarnageHeart.AppImage && cd deck
+          ./CarnageHeart.AppImage --appimage-extract >/dev/null
+          DIR="$(APPIMAGE="$PWD/CarnageHeart.AppImage" CH_APPIMAGE_INSTALL_ONLY=1 sh squashfs-root/AppRun)"
+          cd "${DIR}"
+          test ! -e /usr/include/X11/Xlib.h || { echo "::error::container has X11 headers"; exit 1; }
+          python3 psxrecomp/psxrecomp_cli.py ensure-toolchain --project-root "$PWD"
+          python3 psxrecomp/psxrecomp_cli.py ensure-emitters --project-root "$PWD"
+          python3 - <<'PY'
+          import sys
+          from pathlib import Path
+          sys.path[:0] = ["psxrecomp", "psxrecomp/tools"]
+          import psxrecomp_cli as cli
+          class Log:
+              def log(self, msg): print(msg, flush=True)
+          root = Path(".").resolve()
+          cli._cmake_configure(root, root / "build-deck", pgo="", progress=Log(), extra=[
+              "-DPSXRECOMP_FORCE_SETUP_HOST=ON", "-DPSX_SETUP_WIZARD=ON", "-DPSX_RECOMP_UI=ON",
+              "-DPSX_NETPLAY=OFF", "-DPSX_ENABLE_VULKAN=OFF"])
+          tc = cli.resolve_embedded_toolchain_bin(root)
+          import subprocess
+          subprocess.run([str(tc / "cmake"), "--build", str(root / "build-deck"), "--target", "psx-runtime"], check=True)
+          PY
+          SDL_DIR="$(grep '^SDL3_DIR' build-deck/CMakeCache.txt | cut -d= -f2-)"
+          echo "SDL3_DIR=${SDL_DIR}"
+          case "${SDL_DIR}" in */deps/lib/cmake/SDL3) ;; *) echo "::error::did not use the pack's SDL3"; exit 1 ;; esac
+          EXE=build-deck/CarnageHeart_Recompiled
+          test -x "${EXE}"
+          grep -qa 'libX11.so.6' "${EXE}" || { echo "::error::SDL has no X11 video driver"; exit 1; }
+          grep -qaE 'libasound.so.2|libpulse.so.0' "${EXE}" || { echo "::error::SDL has no audio driver"; exit 1; }
+          echo "launcher built on a bare system with X11 and audio drivers"
+
   # Player's first run on a clean Windows PC (no MSYS2 on PATH): unzip the kit
   # and run the same toolchain + emitter build the setup wizard runs, so a
   # failure shows its real compiler output here instead of "exit 1".

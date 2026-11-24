@@ -181,9 +181,16 @@ int SDL_main(int argc, char *argv[])
      * Internal resolution (4x, meant for the OpenGL renderer) made it
      * rasterise 16x the pixels and held the Y700 Gen 2 at ~45 fps with audio
      * underruns (test 3 log). The GPU renderer uses the player setting. */
-    if (!gpu) setenv("PSX_INTERNAL_RESOLUTION", "native", 0);
+    if (!gpu) {
+        setenv("PSX_INTERNAL_RESOLUTION", "native", 0);
+    } else {
+        /* 4x (960 lines; 4096x2048 VRAM surface) is sharp on a 1600-line
+         * panel. Fixed here so a "Match display" setting carried over from
+         * a PC can't ask the tablet GPU for more. */
+        setenv("PSX_INTERNAL_RESOLUTION", "4x", 0);
+    }
     printf("Carnage Heart (Android): renderer %s\n",
-           gpu ? "OpenGL ES (internal resolution from settings)" : "software (native resolution)");
+           gpu ? "OpenGL ES (4x internal resolution)" : "software (native resolution)");
 
     int rc = ch_android_real_main(argc, args);
     printf("Carnage Heart (Android): main returned %d\n", rc);

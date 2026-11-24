@@ -17,6 +17,17 @@ Players never use this: their setup kit downloads the real NDK.
 5. Build:
    `python3 scripts/android/build_apk.py --toolchain-file scripts/android/sandbox/android-devkit.cmake --platform-jar $ANDROID_DEVKIT/platform/android.jar --build-tools $ANDROID_DEVKIT/build-tools --jobs 4`
 
-Signing: build_apk.py makes `android-signing/carnageheart.keystore` on first
-use (git-ignored). A new sandbox makes a new key, so the device must
-uninstall the old test APK first unless the same keystore is supplied.
+   Pass `--toolchain-file` as an absolute path ($PWD/...): SDL3 is configured
+   from another directory. If psxrecomp/ was filled with
+   `git submodule update` instead of from the kit, also run
+   `git -C psxrecomp submodule update --init --depth 1` and copy the kit's
+   `psxrecomp/third_party/*.tar.gz` into `psxrecomp/third_party/`.
+
+Signing: the owner keeps the test key `carnageheart.keystore` (made 24 Nov
+2026, cert SHA-256 19:6D:C3:EC:...:C9:98). Ask them to attach it and pass
+`--keystore <path>`, so the APK installs over the previous test. Without it
+build_apk.py makes a new key and the device must uninstall first.
+
+GLES renderer check without a device: `tools/research/gles_shader_check/`
+(shader compile/link on Mesa, and a headless Linux run through the same
+GLES bridge with -DCH_GLES_DESKTOP_TEST=ON; see CMakeLists.txt).

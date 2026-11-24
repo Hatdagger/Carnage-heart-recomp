@@ -50,7 +50,7 @@ function(add_executable name)
     endif()
 endfunction()
 
-# Called from CMakeLists.txt after psxrecomp_add_game_runtime().
+# Called at the end of CMakeLists.txt (needs CH_POINTER_LINKED).
 function(ch_android_finish_target target)
     target_sources(${target} PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_main.c"
@@ -71,6 +71,13 @@ function(ch_android_finish_target target)
                 COMPILE_DEFINITIONS "SDL_main=ch_android_real_main")
         endif()
     endforeach()
+    # The right-click / long-press menu (src/pointer_menu.c) is drawn with the
+    # runtime's OpenGL HUD hook, which the software renderer never calls; on
+    # Android every SDL_RenderPresent goes through pointer_menu.c first.
+    if(CH_POINTER_LINKED)
+        target_compile_definitions(${target} PRIVATE CH_WRAP_RENDER_PRESENT=1)
+        target_link_options(${target} PRIVATE "-Wl,--wrap=SDL_RenderPresent")
+    endif()
     target_link_libraries(${target} PRIVATE android log EGL GLESv3 OpenSLES)
     target_link_options(${target} PRIVATE "-Wl,-z,max-page-size=16384")
 endfunction()

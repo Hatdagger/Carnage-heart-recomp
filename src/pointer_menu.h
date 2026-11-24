@@ -20,3 +20,10 @@ void ch_pointer_frame(ChPointerFrame *out);
 /* Once per game PadRead, before ch_pointer_frame: return address of the menu
  * screen on show (see src/screen_labels.c), 0 when none is. */
 void ch_pointer_set_screen(uint32_t ra);
+
+#if defined(PSX_SDL3)
+typedef struct SDL_Renderer SDL_Renderer;
+/* Draws the open menu with an SDL renderer, just before that renderer
+ * presents (software renderer path; called automatically on Android). */
+void ch_pointer_draw_sdl(SDL_Renderer *renderer);
+#endif

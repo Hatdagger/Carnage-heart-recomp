@@ -73,13 +73,6 @@ psxrecomp_add_game_runtime(psx-runtime
         "${CMAKE_CURRENT_SOURCE_DIR}/src/disc_autodetect.c"
 )
 
-if(CH_ANDROID)
-    get_property(_ch_android_targets GLOBAL PROPERTY CH_ANDROID_GAME_TARGETS)
-    foreach(_t IN LISTS _ch_android_targets)
-        ch_android_finish_target(${_t})
-    endforeach()
-endif()
-
 # Stage runtime configs next to the exe for direct build/ launches. Only copy
 # files that exist — never fail POST_BUILD when game_options.toml is absent.
 foreach(_PSX_RUNTIME_CONFIG game.toml game_options.toml)
@@ -134,4 +127,17 @@ if(CH_MOUSE_SELFTEST)
                                 "${CMAKE_CURRENT_SOURCE_DIR}/src/pointer_menu.c"
         TARGET_DIRECTORY ${_ch_mouse_targets}
         PROPERTIES COMPILE_DEFINITIONS CH_MOUSE_SELFTEST=1)
+endif()
+
+# Android: libmain.so extras (src/android shims, GLES/EGL, the menu drawing
+# hook). Last, so it sees whether the pointer code (HLE) was linked in.
+if(CH_ANDROID)
+    set(CH_POINTER_LINKED OFF)
+    if(_ch_game_shards AND NOT PSXRECOMP_FORCE_SETUP_HOST AND CH_MOUSE_IMPL STREQUAL "HLE")
+        set(CH_POINTER_LINKED ON)
+    endif()
+    get_property(_ch_android_targets GLOBAL PROPERTY CH_ANDROID_GAME_TARGETS)
+    foreach(_t IN LISTS _ch_android_targets)
+        ch_android_finish_target(${_t})
+    endforeach()
 endif()

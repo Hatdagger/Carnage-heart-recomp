@@ -89,8 +89,10 @@ int SDL_main(int argc, char *argv[])
     ch_redirect_output(files);
     if (chdir(files) != 0)
         fprintf(stderr, "chdir(%s) failed: %s\n", files, strerror(errno));
-    /* The renderer and other options that only matter on Android. */
     setenv("PSX_ANDROID", "1", 1);
+    /* Back button / gesture: a key the game sees (Circle, in pointer_menu.c)
+     * instead of closing the app. */
+    SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
 
     char exe[1024];
     snprintf(exe, sizeof exe, "%s/CarnageHeart_Recompiled", files);

@@ -1,0 +1,76 @@
+# Android app build check (no disc: the APK it makes has no game in it).
+#
+# Runs the same "Build Android App" step the setup kit gives players, on a
+# clean Linux and a clean Windows runner: downloads the pinned Android tools
+# (scripts/android/android_tools.json), builds SDL3 and the runtime with the
+# NDK, compiles the Java shell and packs/signs the APK. Without generated/ the
+# runtime builds as the framework's "setup host", so this checks every step
+# except compiling the game's own C (which only a player's disc can make).
+name: Android
+
+on:
+  push:
+    branches: ['android', 'android-*']
+    paths-ignore: ['**.md']
+  pull_request:
+    paths: ['android/**', 'scripts/android/**', 'src/android/**', 'cmake/ch_android.cmake',
+            '.github/workflows/android.yml']
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+      - name: Vendored archives (as in the setup kit)
+        run: bash psxrecomp/tools/ci/vendor_deps.sh SDL3 psx_zlib psx_libwebp
+      - name: Ninja
+        run: sudo apt-get install -y ninja-build > /dev/null
+      - name: Build Android App (kit step, no game)
+        env:
+          CH_ANDROID_HOME: ${{ runner.temp }}/ch-android
+        run: |
+          cp scripts/android/kit/build-android-app.sh .
+          ./build-android-app.sh --allow-no-game --jobs 4
+          ls -la CarnageHeart.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: carnageheart-android-nogame-linux
+          path: CarnageHeart.apk
+          retention-days: 7
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - name: Keep LF endings
+        shell: bash
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+      - name: Vendored archives (as in the setup kit)
+        shell: bash
+        run: bash psxrecomp/tools/ci/vendor_deps.sh SDL3 psx_zlib psx_libwebp
+      - name: Compiler pack (as the setup wizard installs it)
+        shell: pwsh
+        run: |
+          python psxrecomp\psxrecomp_cli.py ensure-toolchain --project-root $PWD
+          if ($LASTEXITCODE -ne 0) { throw "ensure-toolchain failed ($LASTEXITCODE)" }
+      - name: Build Android App.bat (kit step, no game)
+        shell: cmd
+        env:
+          CH_ANDROID_HOME: ${{ runner.temp }}\ch-android
+        run: |
+          copy "scripts\android\kit\Build Android App.bat" . >NUL
+          call "Build Android App.bat" --allow-no-game < NUL
+          if errorlevel 1 exit /b 1
+          dir CarnageHeart.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: carnageheart-android-nogame-windows
+          path: CarnageHeart.apk
+          retention-days: 7

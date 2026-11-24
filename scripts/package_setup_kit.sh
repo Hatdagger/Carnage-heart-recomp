@@ -30,7 +30,7 @@ for f in CMakeLists.txt game.toml game_options.toml VERSION symbols.toml \
          codegen_setup.c codegen_setup.h README.md; do
   [[ -e "${ROOT}/${f}" ]] && PROJECT_ARGS+=(--project-file "${f}")
 done
-for d in seeds src assets mods launcher cmake; do
+for d in seeds src assets mods launcher cmake android scripts; do
   [[ -d "${ROOT}/${d}" ]] && PROJECT_ARGS+=(--project-dir "${d}")
 done
 
@@ -66,3 +66,15 @@ for d in "${RABBITIZER_GEN[@]}"; do
 done
 (cd "${ROOT}" && zip -r -q "${KIT_ZIP}" "${RABBITIZER_GEN[@]}")
 echo "Added rabbitizer generated headers to $(basename "${KIT_ZIP}")"
+
+# Android: "Build Android App" at the kit root builds CarnageHeart.apk from the
+# installed game (scripts/android/build_android_app.py; android/ and scripts/
+# are shipped above).
+KIT_LAUNCHER_DIR="$(mktemp -d)"
+case "${ARTIFACT}" in
+  windows-*) cp "${ROOT}/scripts/android/kit/Build Android App.bat" "${KIT_LAUNCHER_DIR}/" ;;
+  *)         cp "${ROOT}/scripts/android/kit/build-android-app.sh" "${KIT_LAUNCHER_DIR}/" ;;
+esac
+(cd "${KIT_LAUNCHER_DIR}" && zip -q "${KIT_ZIP}" ./*)
+rm -rf "${KIT_LAUNCHER_DIR}"
+echo "Added the Android app builder to $(basename "${KIT_ZIP}")"

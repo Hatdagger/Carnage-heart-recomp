@@ -1,0 +1,120 @@
+# Android dev kit for the build sandbox (manual only).
+#
+# Packs the pieces of the Android NDK/SDK that scripts/android/build_apk.py
+# needs (aarch64 sysroot + clang runtime libs, android.jar, aapt2, zipalign,
+# d8, apksigner) into a DRAFT release named android-devkit. Draft releases are
+# visible only to people with write access to this repo, so nothing from the
+# SDK is published. Used when the build machine cannot reach dl.google.com;
+# players' PCs download the same pieces straight from Google (the Windows
+# setup kit's "Build Android app" step).
+name: Android devkit
+
+on:
+  workflow_dispatch:
+    inputs:
+      ndk:
+        description: 'NDK package version'
+        required: false
+        default: '27.3.13750724'
+  # workflow_dispatch only works once a workflow is on the default branch, so
+  # a push that changes this file on the android branch runs it too.
+  push:
+    branches: ['android']
+    paths: ['.github/workflows/android-devkit.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  pack:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install NDK and SDK pieces
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          SDKM="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          (yes || true) | "$SDKM" --install "ndk;${{ inputs.ndk || '27.3.13750724' }}" "build-tools;35.0.0" "platforms;android-35" > /dev/null
+          echo "SDK=$SDK" >> "$GITHUB_ENV"
+
+      - name: Pack
+        run: |
+          set -euo pipefail
+          NDK="$SDK/ndk/${{ inputs.ndk || '27.3.13750724' }}"
+          TC="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
+          OUT="$RUNNER_TEMP/android-devkit"
+          mkdir -p "$OUT/sysroot/usr/lib" "$OUT/clang-rt" "$OUT/build-tools/lib" "$OUT/platform"
+          cp -a "$TC/sysroot/usr/include" "$OUT/sysroot/usr/"
+          cp -a "$TC/sysroot/usr/lib/aarch64-linux-android" "$OUT/sysroot/usr/lib/"
+          CRT="$(dirname "$(find "$TC/lib/clang" -name 'libclang_rt.builtins-aarch64-android.a' | head -1)")"
+          cp -a "$CRT"/*aarch64* "$OUT/clang-rt/"
+          "$TC/bin/clang" --version | head -1 > "$OUT/NDK_CLANG_VERSION"
+          echo "${{ inputs.ndk || '27.3.13750724' }}" > "$OUT/NDK_VERSION"
+          BT="$SDK/build-tools/35.0.0"
+          cp -a "$BT/aapt2" "$BT/zipalign" "$OUT/build-tools/"
+          cp -a "$BT/lib/d8.jar" "$BT/lib/apksigner.jar" "$OUT/build-tools/lib/"
+          cp -a "$BT/lib64" "$OUT/build-tools/" 2>/dev/null || true
+          cp -a "$SDK/platforms/android-35/android.jar" "$OUT/platform/"
+          # The SDL3 Java glue is version-matched to the SDL3 C sources, which
+          # the build gets from the vendored SDL3 tarball, so it is not packed.
+          tar -C "$RUNNER_TEMP" -cJf "$RUNNER_TEMP/android-devkit.tar.xz" android-devkit
+          ls -la "$RUNNER_TEMP/android-devkit.tar.xz"
+
+      - name: Upload to draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete android-devkit --yes -R "$GITHUB_REPOSITORY" 2>/dev/null || true
+          gh release create android-devkit --draft --title "Android devkit (private draft, build sandbox only)" \
+            --notes "Not a game release. Private draft used by the build sandbox." \
+            -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" "$RUNNER_TEMP/android-devkit.tar.xz"
+
+  # Resolves the exact archives the Windows/Linux setup kit downloads for
+  # "Build Android app" and prints their SHA-256 (copied into
+  # scripts/android/android_tools.json by hand).
+  pins:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Resolve and hash tool archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, re, subprocess, urllib.request, xml.etree.ElementTree as ET
+          base = "https://dl.google.com/android/repository/"
+          xml = urllib.request.urlopen(base + "repository2-3.xml").read()
+          root = ET.fromstring(xml)
+          want = {"ndk;27.3.13750724": "ndk", "build-tools;35.0.0": "build-tools", "platforms;android-35": "platform"}
+          picks = {}
+          for pkg in root.iter("remotePackage"):
+              path = pkg.get("path")
+              if path not in want:
+                  continue
+              for arc in pkg.iter("archive"):
+                  hos = arc.findtext("host-os") or "any"
+                  url = arc.find("complete").findtext("url")
+                  if hos in ("windows", "linux", "any"):
+                      picks[f"{want[path]}-{hos}"] = base + url
+          rel = json.loads(subprocess.check_output(["gh", "api", "repos/adoptium/temurin21-binaries/releases/latest"]))
+          for a in rel["assets"]:
+              n = a["name"]
+              if re.match(r"OpenJDK21U-jdk_x64_windows_hotspot_.*\.zip$", n):
+                  picks["jdk-windows"] = a["browser_download_url"]
+              if re.match(r"OpenJDK21U-jdk_x64_linux_hotspot_.*\.tar\.gz$", n):
+                  picks["jdk-linux"] = a["browser_download_url"]
+          out = {}
+          for k, url in sorted(picks.items()):
+              h = hashlib.sha256(); size = 0
+              with urllib.request.urlopen(url) as r:
+                  while True:
+                      b = r.read(1 << 20)
+                      if not b: break
+                      h.update(b); size += len(b)
+              out[k] = {"url": url, "sha256": h.hexdigest(), "size": size}
+              print(k, size, flush=True)
+          print("PINS_JSON_BEGIN")
+          print(json.dumps(out, indent=2))
+          print("PINS_JSON_END")
+          PY

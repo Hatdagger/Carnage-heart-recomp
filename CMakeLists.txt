@@ -11,6 +11,12 @@ endif()
 
 project(CarnageHeartRecomp LANGUAGES C CXX)
 
+# Android (arm64 APK, built by scripts/android/build_apk.py): turns off the
+# desktop-only surfaces and makes the game a libmain.so for SDLActivity.
+if(ANDROID)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ch_android.cmake")
+endif()
+
 # --- Opt-in product surfaces (OFF by default in the framework) -------------
 # Scaffold prompts / flags fill these. Without recomp-ui, PSX_RECOMP_UI is OFF.
 # The wizard (WIZARD_CMAKE_BLOCK / ENABLE_SETUP_WIZARD) is the first-run disc
@@ -139,4 +145,46 @@ if(CH_MOUSE_SELFTEST)
                                 "${CMAKE_CURRENT_SOURCE_DIR}/src/pointer_menu.c"
         TARGET_DIRECTORY ${_ch_mouse_targets}
         PROPERTIES COMPILE_DEFINITIONS CH_MOUSE_SELFTEST=1)
+endif()
+
+# Test-only: -DCH_GLES_DESKTOP_TEST=ON runs the OpenGL renderer through the
+# Android OpenGL ES bridge (src/android/ch_android_gles.c) on a desktop Linux
+# build, so the GLES path can be checked on Mesa without a device:
+#   SDL_VIDEO_DRIVER=offscreen EGL_PLATFORM=surfaceless ./CarnageHeart_Recompiled --renderer opengl ...
+# CH_GLES_HEADERS: a directory with GLES3/ GLES2/ EGL/ KHR/ headers (the NDK
+# sysroot's usr/include works). Link GLES like Android does, e.g.
+#   -DOPENGL_gl_LIBRARY=/usr/lib/x86_64-linux-gnu/libGLESv2.so.2
+#   -DOPENGL_INCLUDE_DIR=<any dir> -DPSX_RECOMP_UI=OFF -DPSX_SETUP_WIZARD=OFF
+#   -DSDL_X11=OFF -DSDL_WAYLAND=OFF -DSDL_UNIX_CONSOLE_BUILD=ON
+option(CH_GLES_DESKTOP_TEST "Desktop build using the Android GLES bridge (testing only)" OFF)
+if(CH_GLES_DESKTOP_TEST AND NOT ANDROID)
+    set(CH_GLES_HEADERS "" CACHE PATH "Directory with GLES3/ and KHR/ headers")
+    foreach(_t IN LISTS _ch_mouse_targets)
+        target_sources(${_t} PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_gles.c"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_gl_shims.c"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_gles_translate.c")
+        set_source_files_properties(
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_gles.c"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_gl_shims.c"
+            TARGET_DIRECTORY ${_t}
+            PROPERTIES COMPILE_OPTIONS "-idirafter;${CH_GLES_HEADERS}")
+        target_link_options(${_t} PRIVATE
+            "-Wl,--wrap=SDL_GL_SetAttribute" "-Wl,--wrap=SDL_GL_GetProcAddress"
+            "-Wl,--wrap=glTexImage2D" "-Wl,--wrap=glTexSubImage2D" "-Wl,--wrap=glReadPixels"
+            "-Wl,--wrap=gl_renderer_init_context")
+    endforeach()
+endif()
+
+# Android: libmain.so extras (src/android shims, GLES/EGL, the menu drawing
+# hook). Last, so it sees whether the pointer code (HLE) was linked in.
+if(CH_ANDROID)
+    set(CH_POINTER_LINKED OFF)
+    if(_ch_game_shards AND NOT PSXRECOMP_FORCE_SETUP_HOST AND CH_MOUSE_IMPL STREQUAL "HLE")
+        set(CH_POINTER_LINKED ON)
+    endif()
+    get_property(_ch_android_targets GLOBAL PROPERTY CH_ANDROID_GAME_TARGETS)
+    foreach(_t IN LISTS _ch_android_targets)
+        ch_android_finish_target(${_t})
+    endforeach()
 endif()

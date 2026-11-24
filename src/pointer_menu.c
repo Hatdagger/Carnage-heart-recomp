@@ -34,7 +34,10 @@
  * Input comes from an SDL event watch, which observes events without taking
  * them from the runtime or the in-game menu, and catches very short clicks
  * (touchpad taps) that polling would miss. The menu is drawn with the
- * runtime's HUD hook (OpenGL), on top of the game image.
+ * runtime's HUD hook (OpenGL 3.3 core or OpenGL ES 3), on top of the game
+ * image, or with SDL_Renderer when the software renderer is in use
+ * (ch_pointer_draw_sdl; on Android every SDL_RenderPresent calls it).
+ * On Android the Back button presses Circle (or closes the menu).
  *
  * Off during netplay (this is local-only input and would desync the peers),
  * while the in-game menu owns input, and while the runtime's PS1 Mouse mode
@@ -360,6 +363,17 @@ static bool SDLCALL watch(void *ud, SDL_Event *ev) {
         }
         break;
     }
+#if defined(__ANDROID__)
+    case SDL_EVENT_KEY_DOWN:
+        /* The Back button / gesture (trapped in src/android/ch_android_main.c):
+         * closes the menu if it is open, else presses Circle (back). */
+        if (ev->key.key == SDLK_AC_BACK && !ev->key.repeat && !ignore_input()) {
+            if (s_menu_open) s_menu_open = 0;
+            else fire(B_CIRCLE);
+            s_activity = 1;
+        }
+        break;
+#endif
     default: break;
     }
     unlock();
@@ -410,12 +424,21 @@ static int gl_init(void) {
     L(glEnable); L(glDisable); L(glViewport); L(glPixelStorei);
 #undef L
     if (!ok) return 0;
-    static const char *vs =
-        "#version 330\nlayout(location=0) in vec2 p; layout(location=1) in vec2 t; out vec2 uv;\n"
-        "void main(){ uv=t; gl_Position=vec4(p,0.0,1.0); }\n";
-    static const char *fs =
-        "#version 330\nin vec2 uv; uniform sampler2D img; out vec4 c;\n"
-        "void main(){ c=texture(img,uv); }\n";
+    /* Desktop GL 3.3 core, or OpenGL ES 3 (Android / GLES contexts). */
+    typedef const GLubyte *(APIENTRY *GetStringFn)(GLenum);
+    GetStringFn get_string = (GetStringFn)SDL_GL_GetProcAddress("glGetString");
+    const char *ver = get_string ? (const char *)get_string(GL_VERSION) : NULL;
+    const int es = ver && strncmp(ver, "OpenGL ES", 9) == 0;
+    const char *vs = es
+        ? "#version 300 es\nlayout(location=0) in vec2 p; layout(location=1) in vec2 t; out vec2 uv;\n"
+          "void main(){ uv=t; gl_Position=vec4(p,0.0,1.0); }\n"
+        : "#version 330\nlayout(location=0) in vec2 p; layout(location=1) in vec2 t; out vec2 uv;\n"
+          "void main(){ uv=t; gl_Position=vec4(p,0.0,1.0); }\n";
+    const char *fs = es
+        ? "#version 300 es\nprecision mediump float; in vec2 uv; uniform sampler2D img; out vec4 c;\n"
+          "void main(){ c=texture(img,uv); }\n"
+        : "#version 330\nin vec2 uv; uniform sampler2D img; out vec4 c;\n"
+          "void main(){ c=texture(img,uv); }\n";
     GLuint v = p_glCreateShader(GL_VERTEX_SHADER), f = p_glCreateShader(GL_FRAGMENT_SHADER);
     p_glShaderSource(v, 1, &vs, NULL); p_glCompileShader(v);
     p_glShaderSource(f, 1, &fs, NULL); p_glCompileShader(f);
@@ -467,8 +490,18 @@ static void render_menu(const MenuItem *items, int n, int w, int h, int hover) {
     }
 }
 
-static void SDLCALL hud_draw(int w, int h, void *ctx) {
-    (void)ctx;
+/* Game-image height (drawable pixels) per menu scale step. Touch screens get
+ * a larger menu so the rows are big enough for a finger. */
+#if defined(__ANDROID__)
+#define MENU_SCALE_DIV 260.0f
+#else
+#define MENU_SCALE_DIV 450.0f
+#endif
+
+/* Snapshot the menu for a frame of w x h drawable pixels and render it into
+ * s_img. Returns 1 when the menu is open (and gives its size in menu pixels
+ * and its corner in window coordinates), 0 when there is nothing to draw. */
+static int menu_prepare(int w, int h, int *out_mw, int *out_mh, float *out_mx, float *out_my) {
     SDL_AddAtomicInt(&s_draws, 1);
     int open, ww, wh; float mx, my, px, py;
     lock();
@@ -478,14 +511,22 @@ static void SDLCALL hud_draw(int w, int h, void *ctx) {
     if (have) {
         s_pixel_density = (float)w / (float)ww;
         float rx, ry, rw, rh; game_rect(w, h, &rx, &ry, &rw, &rh);
-        int sc = (int)(rh / 450.0f); s_menu_scale = sc < 1 ? 1 : sc;
+        int sc = (int)(rh / MENU_SCALE_DIV); s_menu_scale = sc < 1 ? 1 : sc;
     }
     int hover = open ? menu_item_at(px, py) : -1;
     MenuItem items[MAX_ITEMS]; const int n = s_n_items, mw = s_mw, mh = s_mh;
     memcpy(items, s_items, sizeof items);
     unlock();
-    if (!open || !have || !gl_init()) return;
+    if (!open || !have) return 0;
     render_menu(items, n, mw, mh, hover);
+    *out_mw = mw; *out_mh = mh; *out_mx = mx; *out_my = my;
+    return 1;
+}
+
+static void SDLCALL hud_draw(int w, int h, void *ctx) {
+    (void)ctx;
+    int mw, mh; float mx, my;
+    if (!menu_prepare(w, h, &mw, &mh, &mx, &my) || !gl_init()) return;
 
     GLint prog, vao, abuf, atex, tex0, samp, vp[4], bsrc, bdst, bsrca, bdsta, beq, beqa, unpack, rowlen;
     p_glGetIntegerv(GL_CURRENT_PROGRAM, &prog); p_glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vao);
@@ -533,6 +574,74 @@ static void SDLCALL hud_draw(int w, int h, void *ctx) {
     if (scis) p_glEnable(GL_SCISSOR_TEST);
     p_glViewport(vp[0], vp[1], vp[2], vp[3]);
 }
+
+/* ---- Drawing with the SDL renderer ---------------------------------------
+ * The runtime's HUD hook only runs with the OpenGL renderer. The software
+ * renderer presents through SDL_Renderer (GLES on Android), so there the
+ * menu image is drawn as a texture just before the frame is presented. */
+static SDL_Texture  *s_sdl_tex;
+static SDL_Renderer *s_sdl_tex_owner;
+
+void ch_pointer_draw_sdl(SDL_Renderer *r) {
+    int w = 0, h = 0;
+    if (!r || SDL_GetRenderTarget(r) || !SDL_GetCurrentRenderOutputSize(r, &w, &h) || w <= 0 || h <= 0)
+        return;
+    int mw, mh; float mx, my;
+    if (!menu_prepare(w, h, &mw, &mh, &mx, &my)) return;
+    if (s_sdl_tex_owner != r) {             /* new renderer: old texture died with the old one */
+        s_sdl_tex = NULL; s_sdl_tex_owner = r;
+    }
+    if (!s_sdl_tex) {
+        s_sdl_tex = SDL_CreateTexture(r, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, MAX_W, MAX_H);
+        if (!s_sdl_tex) return;
+        SDL_SetTextureBlendMode(s_sdl_tex, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(s_sdl_tex, SDL_SCALEMODE_NEAREST);
+    }
+    const SDL_Rect area = { 0, 0, mw, mh };
+    if (!SDL_UpdateTexture(s_sdl_tex, &area, s_img, mw * 4)) return;
+
+    /* Draw in output pixels: lift the runtime's letterbox, viewport, scale
+     * and clip for this one copy, then put them back. */
+    int lw = 0, lh = 0; SDL_RendererLogicalPresentation lmode = SDL_LOGICAL_PRESENTATION_DISABLED;
+    SDL_GetRenderLogicalPresentation(r, &lw, &lh, &lmode);
+    const bool had_vp = SDL_RenderViewportSet(r); SDL_Rect vp; SDL_GetRenderViewport(r, &vp);
+    const bool had_clip = SDL_RenderClipEnabled(r); SDL_Rect clip; SDL_GetRenderClipRect(r, &clip);
+    float sx = 1.0f, sy = 1.0f; SDL_GetRenderScale(r, &sx, &sy);
+    SDL_SetRenderLogicalPresentation(r, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
+    SDL_SetRenderViewport(r, NULL); SDL_SetRenderClipRect(r, NULL); SDL_SetRenderScale(r, 1.0f, 1.0f);
+
+    const float d = s_pixel_density, k = (float)s_menu_scale;
+    const SDL_FRect src = { 0.0f, 0.0f, (float)mw, (float)mh };
+    const SDL_FRect dst = { mx * d, my * d, (float)mw * k, (float)mh * k };
+    SDL_RenderTexture(r, s_sdl_tex, &src, &dst);
+
+    SDL_SetRenderLogicalPresentation(r, lw, lh, lmode);
+    SDL_SetRenderScale(r, sx, sy);
+    SDL_SetRenderViewport(r, had_vp ? &vp : NULL);
+    SDL_SetRenderClipRect(r, had_clip ? &clip : NULL);
+}
+
+#if defined(CH_WRAP_RENDER_PRESENT)
+/* Android: the build links with -Wl,--wrap=SDL_RenderPresent (see
+ * cmake/ch_android.cmake), so every present of the SDL renderer comes here
+ * first and the menu goes on top of the finished frame. */
+bool __real_SDL_RenderPresent(SDL_Renderer *renderer);
+#ifdef __ANDROID__
+void ch_android_frame_begin_present(void); /* src/android/ch_android_perf.c */
+void ch_android_frame_end_present(void);
+#endif
+bool __wrap_SDL_RenderPresent(SDL_Renderer *renderer) {
+#ifdef __ANDROID__
+    ch_android_frame_begin_present();
+#endif
+    ch_pointer_draw_sdl(renderer);
+    bool ok = __real_SDL_RenderPresent(renderer);
+#ifdef __ANDROID__
+    ch_android_frame_end_present();
+#endif
+    return ok;
+}
+#endif
 
 #ifdef CH_MOUSE_SELFTEST
 /* Test-only: CH_POINTER_SELFTEST_FILE holds lines pushed as real SDL events,

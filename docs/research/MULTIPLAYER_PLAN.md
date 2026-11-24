@@ -1,6 +1,6 @@
 # Carnage Heart ReComp: Multiplayer Plan
 
-Researched 2026-11-21, updated 2026-11-23 after the first real two-copy test, and 2026-11-22 after the campaign RAM mapping, the VS/saves mapping, the hot-seat test and the first turn files (see [CAMPAIGN_RAM_MAP.md](CAMPAIGN_RAM_MAP.md) and [VS_MODE_AND_SAVES.md](VS_MODE_AND_SAVES.md)).
+Researched 2026-11-21, updated 2026-11-24 (launcher Online screen, catching up when the map opens), 2026-11-23 after the first real two-copy test, and 2026-11-22 after the campaign RAM mapping, the VS/saves mapping, the hot-seat test and the first turn files (see [CAMPAIGN_RAM_MAP.md](CAMPAIGN_RAM_MAP.md) and [VS_MODE_AND_SAVES.md](VS_MODE_AND_SAVES.md)).
 
 **Priority (decided 2026-11-21): campaign versus (Option C) comes first.** VS mode (Options A and B) is less important and comes later.
 
@@ -117,7 +117,40 @@ Known gaps:
 - **`relay/worker.js`**: a Cloudflare Worker (one file, free plan, storage in Workers KV). No accounts: creating a game gives a code like `K7QX-M2PD` and player A's secret key; joining gives player B's key (only once). Only A's key can store odd turn files and only B's the even ones; files must come in order and can't be changed once stored. `GET /v1/games/<code>` says whose turn it is (for the launcher's "your turn" check and notifications). Setup steps for the owner are in `relay/README.md`.
 - **`src/turn_relay.c`**: the game keeps its folder of turn files, and a background thread keeps it in step with the relay through the system's curl (as the launcher's updater does): it uploads my files as soon as they are written (retrying until the relay has them) and fetches the file the game is waiting for every 3 seconds. Switches: `CH_TURN_RELAY`, `CH_TURN_GAME`, `CH_TURN_KEY` (plus `CH_TURN_ROLE`); the folder defaults to `online-turns/<code>`.
 - **Tested**: `node relay/test.mjs` (the relay's rules); the simulator plays an online game with separate folders through the relay run locally (`relay/dev_server.mjs`); and **two real copies with separate folders played the capture game through the local relay** to the victory/defeat screens, no desyncs. Not yet tested on a real Cloudflare deployment (needs the owner's account).
-- Gap: a player who starts on a new device (empty folder) is not caught up from the relay yet; player A would even try to start a new game there (the relay refuses it, so nothing breaks, but it would not play).
+- ~~Gap: a player who starts on a new device (empty folder) is not caught up from the relay yet~~ (fixed 2026-11-24, below).
+
+### Launcher Online screen, closing after sending, catching up on start (2026-11-24, step 6c)
+**Launcher: ONLINE PLAY → ONLINE CAMPAIGN** (`launcher/ch_online.cpp` for the relay side, `launcher/ch_online_menu.inc` for the pages; `launcher/ch_menu.inc` only got a few hooks). Screenshots: `docs/screenshots/launcher-online-game.png`, `launcher-online-join.png`, `launcher-main-your-turn.png`.
+- **Your games**: a list with each game's code and whose turn it is (YOUR TURN, WAITING, SENDING, OVER, OFFLINE), then NEW GAME and JOIN A GAME.
+- **NEW GAME** asks the relay for a game; you are player A. The game page shows the code in large letters to give to the other player.
+- **JOIN A GAME**: the code is entered without typing if you like: left/right pick a letter, up/down change it (controller or arrow keys). A keyboard can also just type it or paste it (Ctrl+V); a mouse clicks the top or bottom half of a letter. Codes never contain 0, O, 1 or I, so they can't be misread.
+- **The game page**: PLAY (starts the game with the four relay switches set for this game), CHECK AGAIN, FORGET THIS GAME (press twice; it warns that the key goes with it).
+- **Keys** are kept in `online-turns/games.txt` beside the game (one line per game: code, A/B, key, relay address). Turn files stay in `online-turns/<code>/`, where the game already put them.
+- **"It's your turn"**: when the launcher opens it asks the relay about each game (only when the player has online games), and every minute while the Online screen is open. The main page then shows YOUR TURN next to ONLINE PLAY and on the status panel.
+- While checking, the launcher also **sends any turn file the game could not send** (the game was closed too soon or the connection was down) and **fetches the turn files the folder is missing**.
+- **Relay address**: built in with `-DCH_TURN_RELAY_URL=<address>`, or the first line of `online-turns/relay.txt` beside the game, or the `CH_TURN_RELAY` switch. Without one, the page says so and NEW GAME / JOIN are greyed out. Each game remembers the relay it was made on.
+- The Online Campaign entry only works in builds with `-DCH_REMOTE_BATTLE=ON` (otherwise it stays "SOON").
+
+**Catching up when the map opens** (`src/turn_files.c`, hook on `0x800333F8`). `0x8003188C` is the routine that opens the campaign map: it sets up the tables for a new map (or keeps the ones a save loaded), and its last step calls `0x800333F8`, which nothing else calls. At that moment the game now: brings the folder up to date with the relay (waits up to 10 seconds), runs hot-seat's set-up straight away, and loads the newest turn file:
+- **the opponent's file is newest**: it is my turn; the map shows the real state before I give any orders ("Caught up with player B's turn. It's your turn.");
+- **my own file is newest**: I already played; my file is loaded turned back to my point of view, and the next End Turn only waits for theirs ("It's player B's turn. Close the game, or press End Turn to wait.");
+- **no files**: player A starts a new game; player B's first End Turn waits for A's turn 1.
+So nobody needs the "press End Turn once to catch up" step any more, and orders can't be lost to it.
+
+**Closing after sending**: after End Turn the bottom line says "Sending your turn to the relay..." and then "Your turn is sent. You can close the game, or wait for player B." If the game is closed before that, the launcher sends the file the next time it opens.
+
+**New computer / empty folder**: the game's relay thread first asks the relay for its newest turn file and downloads every one the folder lacks. Player A only starts a new game once the relay has said it has no turn files, so an empty folder never overwrites a game in progress. The game now also creates the turn folder itself (it failed with curl error 23 when the folder did not exist).
+
+**Tested**
+- Simulator (`tools/research/turnsim/run.sh`, now with a map-start step): straight game; B restarts at the start of its turn (caught up when the map opens); B closes right after sending (its own file comes back, the next End Turn waits); online through the local relay, then B on a new computer (turn files 1-7 fetched from the relay). All checks pass.
+- **Real game, two copies, separate folders, local relay** (`tools/research/online_demo.py`): both map starts; B closed at the start of its turn and started again: the map caught up with turn file 3 without an End Turn and **all units, bases, OKEs and funds were byte-for-byte what B had before closing**; the same from an empty folder (all three files from the relay); B closed right after sending turn 4: its own state came back exactly and the next End Turn waited for A's turn 5; then played on to B's victory and A's defeat. No desyncs.
+- Launcher pages: drawn and driven with key presses through the real menu code against the local relay (`tools/research/launcher_shots/run.sh`, which draws the pages in software since this sandbox has no screen): create, PLAY (sets the switches and launches), join by typing and with the arrows, wrong code, a third player, game over, forget.
+- Not tested: the launcher in a real window (no screen here) and a real Cloudflare relay.
+
+Known gaps:
+- The map start does not check which scenario was started. Starting a map other than Europa (Practice) in an online game would load the Europa state into it. To add: the scenario number in the turn file.
+- If player A's very first End Turn happens while the relay can't be reached, that End Turn waits for the relay and then ends without sending; A presses End Turn again to play turn 1 (production ran once for nothing).
+- Desktop only for now; the Android notifications need chat C's APK.
 
 ### Saves and memory cards: mapped (2026-11-22)
 A campaign save is one 5-block file whose body is a straight copy of the campaign tables in RAM (cards, units, bases, OKEs, globals). No checksum found. A single design is one 1152-byte record at a known offset. See VS_MODE_AND_SAVES.md.
@@ -127,7 +160,7 @@ A campaign save is one 5-block file whose body is a straight copy of the campaig
 
 ### Other parts
 - **Notifications**: no push server at first. The Android app checks for new turn files in the background (about every 15 minutes) and posts a local notification. Desktop checks when the launcher opens.
-- **Storage** of turn files: see "Turn-file storage: to choose" above.
+- **Storage** of turn files: the small relay (above).
 
 ## Option A: Live VS over the internet (later)
 PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card becomes the match's slot-2 card. Both players open VS mode and watch the same battle.
@@ -144,11 +177,30 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 3. ~~Map the player order screens (including re-orders) and factory data~~ (done 2026-11-22).
 4. ~~Local hot-seat test on one machine: end turn, swap sides, play the other side~~ (done 2026-11-22, `src/hotseat.c`).
 5. ~~Turn files: capture orders and battle results on one copy, apply them on a second copy~~ (done 2026-11-22, `src/turn_files.c`; tested in the real game 2026-11-23).
-6. ~~Waiting without freezing the game~~ and ~~storage: the turn relay~~ (done 2026-11-23). Next: an Online screen in the launcher (create/join a game, relay address), closing the game after sending and catching up on start (also from the relay on a new device), then notifications (desktop: when the launcher opens; Android later).
+6. ~~Waiting without freezing the game~~ and ~~storage: the turn relay~~ (done 2026-11-23). ~~Launcher Online screen, closing after sending, catching up on start (also from the relay on a new device), desktop "your turn" check~~ (done 2026-11-24). Next: a real relay test, then Android notifications.
 7. Optional: visual replay of the enemy's turn from the orders in the file.
 8. Later: Options A and B (the card and save layout they need is now mapped).
 
-## Session status (chat B, 2026-11-23)
+## Session status (chat B, 2026-11-24)
+**Done**
+- Launcher ONLINE CAMPAIGN screen (on this branch): your games with whose turn it is, NEW GAME, JOIN A GAME by code (controller, keyboard or mouse), PLAY with the relay switches, CHECK AGAIN, FORGET. The main page shows YOUR TURN.
+- The launcher checks the relay when it opens, sends turn files the game could not, and fetches missing ones.
+- The game catches up by itself when the map opens (no End Turn needed), and from the relay on an empty folder. The bottom line says when a sent turn is on the relay, so the game can be closed.
+- Fixed: the game did not create its turn folder (relay catch-up failed with curl error 23); the launcher's background thread could hang the program on exit.
+- Tests: simulator (two new cases), real two-copy online test with restarts (`online_demo.py`), launcher pages driven through the real menu code (`launcher_shots/run.sh`).
+
+**Next**
+- Owner: set up the relay on Cloudflare (`relay/README.md`) and send the address; then a real online test (task 1) and building the address into releases (`-DCH_TURN_RELAY_URL=`).
+- Chat A: look over the small hooks in `launcher/ch_menu.inc` and `cmake/ch_launcher_menu.cmake` when merging; the pages themselves are in the new `launcher/ch_online_menu.inc`.
+- Release builds need `-DCH_REMOTE_BATTLE=ON` for the Online Campaign entry to work.
+- Check the scenario at map start (put the scenario number in the turn file).
+- Android notifications after chat C has an APK.
+
+**Blocked**
+- A real (non-local) relay test needs the owner's Cloudflare relay address.
+- Pushing from this sandbox (see the session notes).
+
+## Session status (chat B, 2026-11-23, previous)
 **Done**
 - Real two-copy turn-file test: capture game, battle game and restart all worked; no desyncs.
 - Fixed the frozen waiting copy: it keeps running and shows a "waiting" line until the opponent's file arrives.

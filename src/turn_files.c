@@ -39,13 +39,29 @@
  *                          with a relay, see turn_relay.c)
  *   CH_TURN_ROLE=A|B       which player this copy is (default A)
  *
- * Starting and resuming: the first End Turn of a session only RECEIVES,
- * unless this is player A and the folder is empty (a new game: A plays and
- * sends turn 1). During a receive-only End Turn the player's own units are
- * held still, nothing is sent, and the newest state from the opponent is
- * loaded. So player B starts by pressing End Turn once, and either player
- * can close the game, start the same scenario again (loading their own save
- * gets their designs back) and press End Turn to catch up.
+ * Starting and resuming: when the map opens (0x800333F8, the last step of
+ * the map start 0x8003188C, after the tables are set up or loaded from a
+ * save) the newest turn file in the folder is loaded straight away, so the
+ * player sees the real state before giving any orders:
+ *   - newest file is the opponent's: it is my turn, carry on from it;
+ *   - newest file is mine: I already played, it is the opponent's turn. My
+ *     own file is loaded (turned back to my point of view) and the next End
+ *     Turn only waits for theirs;
+ *   - no files: player A starts a new game (plays turn 1); player B's first
+ *     End Turn waits for A's turn 1.
+ * With the relay, the folder is first brought up to date with it (all turn
+ * files are fetched on a new computer). A new game is only started once the
+ * relay has said it has no turn files, so player A on an empty folder never
+ * overwrites a game in progress.
+ *
+ * A receive-only End Turn holds my units still, sends nothing and loads the
+ * opponent's next file. If the map start did not catch up (another
+ * scenario, or a build without this hook), the first End Turn still does,
+ * as before.
+ *
+ * After sending, the player may close the game: with the relay, the status
+ * line says when the turn file is on it. The launcher also sends any turn
+ * file the game could not (launcher/ch_online.cpp).
  *
  * File layout (version 1, little-endian), 48-byte header then the body:
  *    0  4  "CHTF"
@@ -111,10 +127,15 @@
 /* turn_relay.c: keeps the folder in step with the online relay. */
 int ch_relay_start(int role, const char *dir, char *dir_out, size_t dir_n);
 void ch_relay_want(uint32_t seq);
+int ch_relay_ready(void);
+int ch_relay_wait_ready(int ms);
+uint32_t ch_relay_uploaded(void);
 static int g_relay;
 
 /* From hotseat.c: the waiting side's design cards (28 x 1152, flat). */
 uint8_t *ch_hotseat_other_cards(void);
+void ch_hotseat_setup_now(CPUState *cpu);
+extern void host_osd_set_status(const char *msg);
 
 static int g_on = -1;
 static char g_dir[512];
@@ -123,6 +144,8 @@ static int g_synced;              /* a turn file has been loaded (or A sent turn
 static int g_receive_only;        /* this End Turn only receives */
 static uint32_t g_next_send;      /* sequence number of my next turn file */
 static uint64_t g_prev_hash;      /* tables hash of the last file loaded */
+static uint32_t g_sent;           /* the last turn file I sent this session */
+static int g_over;                /* the newest turn file ended the game */
 
 /* My units at the start of my turn, for working out the orders I gave. */
 static uint8_t g_start_units[32][UNIT_SIZE];
@@ -268,8 +291,9 @@ void ch_turns_note_battle(CPUState *cpu, uint32_t unit1, uint32_t unit2)
 /* Start of End Turn (fresh call, after hot-seat set-up). */
 void ch_turns_begin(CPUState *cpu)
 {
+    host_osd_set_status("");
     if (!g_synced) {
-        if (g_role == 0 && latest_seq(0) == 0) {
+        if (g_role == 0 && latest_seq(0) == 0 && (!g_relay || ch_relay_ready() == 1)) {
             g_receive_only = 0;     /* new game: A plays and sends turn 1 */
             g_next_send = 1;
             g_prev_hash = 0;
@@ -365,6 +389,7 @@ static int send_file(CPUState *cpu, int game_over)
         fprintf(stderr, "[turns] ERROR: could not rename %s to %s\n", tmp, path);
         return 0;
     }
+    g_sent = g_next_send;
     fprintf(stderr, "[turns] sent turn file %u (%u order(s), %u battle(s)%s), %zu bytes\n",
             (unsigned)g_next_send, (unsigned)g_norders, (unsigned)g_nbattles,
             game_over ? ", game over" : "", n);
@@ -491,14 +516,35 @@ static int load_file(CPUState *cpu, uint32_t seq, uint32_t len)
 static uint32_t g_want;           /* the turn file I am waiting for */
 static uint32_t g_polls;
 
+static char g_status[128];
+
+static void show_status(const char *msg)
+{
+    if (strcmp(msg, g_status) == 0) return;
+    snprintf(g_status, sizeof g_status, "%s", msg);
+    host_osd_set_status(msg);
+}
+
+/* The bottom line while waiting: whose turn it is and, online, whether my
+ * turn has reached the relay (then the game can be closed). */
 static void set_waiting_status(int on)
 {
-    extern void host_osd_set_status(const char *msg);
-    char msg[96];
-    if (on)
-        snprintf(msg, sizeof msg, "Waiting for player %c's turn (turn file %u)...",
-                 g_want & 1u ? 'A' : 'B', (unsigned)g_want);
-    host_osd_set_status(on ? msg : "");
+    char msg[128];
+    const char other = g_role ? 'A' : 'B';
+    if (!on) {
+        show_status("");
+    } else if (g_want == 0) {
+        show_status("Can't reach the relay yet. Trying again...");
+    } else if (g_relay && g_sent && ch_relay_uploaded() < g_sent) {
+        snprintf(msg, sizeof msg, "Sending your turn to the relay... Waiting for player %c.", other);
+        show_status(msg);
+    } else if (g_relay && g_sent) {
+        snprintf(msg, sizeof msg, "Your turn is sent. You can close the game, or wait for player %c.", other);
+        show_status(msg);
+    } else {
+        snprintf(msg, sizeof msg, "Waiting for player %c's turn (turn file %u)...", other, (unsigned)g_want);
+        show_status(msg);
+    }
 }
 
 static int finish_load(CPUState *cpu, uint32_t len)
@@ -510,6 +556,7 @@ static int finish_load(CPUState *cpu, uint32_t len)
     g_synced = 1;
     g_receive_only = 0;
     capture_start(cpu);
+    g_over = over;
     if (over) g_synced = 0;
     return over;
 }
@@ -526,8 +573,11 @@ int ch_turns_swap_point(CPUState *cpu, int game_over)
         g_held = 0;
     }
     if (g_receive_only) {
-        /* Catch up: the opponent's turn after my newest one. */
+        /* Catch up: the opponent's turn after my newest one. Player A with
+         * no turn files is only here when the relay could not be reached:
+         * wait until it can (g_want 0), then decide. */
         g_want = latest_seq(1) + 1;
+        if (seq_is_mine(g_want)) g_want = 0;
     } else {
         send_file(cpu, game_over);
         if (game_over) {
@@ -536,22 +586,44 @@ int ch_turns_swap_point(CPUState *cpu, int game_over)
         }
         g_want = g_next_send + 1;
     }
-    const uint32_t len = read_file(g_want);
+    const uint32_t len = g_want ? read_file(g_want) : 0;
     if (len)
         return finish_load(cpu, len);
-    fprintf(stderr, "[turns] waiting for turn file %u from player %c (the game keeps running)\n",
-            (unsigned)g_want, g_want & 1u ? 'A' : 'B');
+    if (g_want)
+        fprintf(stderr, "[turns] waiting for turn file %u from player %c (the game keeps running)\n",
+                (unsigned)g_want, g_want & 1u ? 'A' : 'B');
+    else
+        fprintf(stderr, "[turns] waiting for the relay before playing turn 1\n");
     set_waiting_status(1);
     if (g_relay) ch_relay_want(g_want);
     g_polls = 0;
     return -1;
 }
 
-/* Called once a frame while waiting. Looks for the file twice a second. */
+/* Called once a frame while waiting. Looks for the file twice a second.
+ * Returns -1 while still waiting, 0 when the opponent's turn was loaded (or
+ * when there is nothing to wait for after all), 1 when the game is over. */
 int ch_turns_poll(CPUState *cpu)
 {
     if (++g_polls % 30u != 0)
         return -1;
+    set_waiting_status(1);
+    if (g_want == 0) {
+        /* Player A, no turn files, relay not reached at the start. */
+        if (ch_relay_ready() != 1) return -1;
+        g_want = latest_seq(1) + 1;
+        if (seq_is_mine(g_want)) {
+            /* The relay has no game yet: nothing to receive. End this turn
+             * without changes; the next End Turn plays turn 1. */
+            fprintf(stderr, "[turns] the relay is reachable now; press End Turn to play turn 1\n");
+            show_status("Connected to the relay. Press End Turn to play turn 1.");
+            if (g_relay) ch_relay_want(0);
+            g_want = 0;
+            return 0;
+        }
+        if (g_relay) ch_relay_want(g_want);
+        return -1;
+    }
     if (!seq_exists(g_want)) {
         if (g_polls % (30u * 120u) == 0)
             fprintf(stderr, "[turns] still waiting for turn file %u\n", (unsigned)g_want);
@@ -559,4 +631,119 @@ int ch_turns_poll(CPUState *cpu)
     }
     const uint32_t len = read_file(g_want);
     return len ? finish_load(cpu, len) : -1;
+}
+
+/* ---- catching up when the map opens ----------------------------------- */
+
+/* Load my own turn file seq (the state I left when I sent it), turned back
+ * to my point of view. The opponent's designs come from their file before
+ * it, if there is one (otherwise hot-seat's set-up gave them the stock
+ * designs). */
+static int load_own_file(CPUState *cpu, uint32_t seq)
+{
+    if (seq > 1) {
+        const uint32_t plen = read_file(seq - 1);
+        if (plen) memcpy(ch_hotseat_other_cards(), g_buf + TF_HEADER + TF_TABLES, TF_CARDS);
+    }
+    const uint32_t len = read_file(seq);
+    if (!len) return 0;
+    const uint32_t units = cpu->read_word(PTR_UNIT_TABLE);
+    const uint32_t bases = cpu->read_word(PTR_BASE_TABLE);
+    const uint32_t okes  = cpu->read_word(PTR_OKE_TABLE);
+    const uint8_t *h = g_buf, *p = g_buf + TF_HEADER;
+    cpu->write_word(GP_FUNDS_CPU, get32(p)); p += 4;      /* the receiver is my opponent */
+    cpu->write_word(GP_FUNDS_PLAYER, get32(p)); p += 4;
+    for (int i = 0; i < UNIT_COUNT; i++, p += UNIT_SIZE) {
+        uint8_t u[UNIT_SIZE];
+        memcpy(u, p, UNIT_SIZE);
+        u[0] = swap_owner(u[0]);
+        wr(cpu, units + ((i + 32) % UNIT_COUNT) * UNIT_SIZE, u, UNIT_SIZE);
+    }
+    for (int i = 0; i < BASE_COUNT; i++, p += BASE_SIZE) {
+        wr(cpu, bases + i * BASE_SIZE, p, BASE_SIZE);
+        cpu->write_byte(bases + i * BASE_SIZE, swap_owner(p[0]));
+    }
+    for (int i = 0; i < OKE_COUNT; i++, p += OKE_SIZE) {
+        wr(cpu, okes + i * OKE_SIZE, p, OKE_SIZE);
+        cpu->write_byte(okes + i * OKE_SIZE, swap_owner(p[0]));
+    }
+    /* The counters in my file are the receiver's; mine had already gone on
+     * by one when I was A (A's turn n and B's turn n make one round). */
+    const uint32_t ahead = g_role == 0 ? 1u : 0u;
+    cpu->write_word(GP_TURN, get32(h + 12) + ahead);
+    cpu->write_word(GP_TURN2, get32(h + 16) + ahead);
+    const uint32_t cur = cpu->read_word(GP_CUR_BASE);
+    if (cur >= BASE_COUNT || cpu->read_byte(bases + cur * BASE_SIZE) != 1)
+        for (uint32_t b = 0; b < BASE_COUNT; b++)
+            if (cpu->read_byte(bases + b * BASE_SIZE) == 1) { cpu->write_word(GP_CUR_BASE, b); break; }
+    fprintf(stderr, "[turns] loaded my own turn file %u: turn %u, funds %u (opponent %u)\n",
+            (unsigned)seq, cpu->read_word(GP_TURN), cpu->read_word(GP_FUNDS_PLAYER),
+            cpu->read_word(GP_FUNDS_CPU));
+    return 1 + (h[7] & 1);
+}
+
+static void catch_up_at_map_start(CPUState *cpu)
+{
+    if (g_relay) {
+        show_status("Catching up with the relay...");
+        const int r = ch_relay_wait_ready(10000);
+        if (r != 1)
+            fprintf(stderr, "[turns] map start: could not reach the relay; using the turn files here\n");
+    }
+    ch_hotseat_setup_now(cpu);
+    g_synced = 0;
+    g_receive_only = 0;
+    g_have_start = 0;
+    g_over = 0;
+    const uint32_t n = latest_seq(0);
+    char msg[128];
+    const char other = g_role ? 'A' : 'B';
+    if (n == 0) {
+        if (g_role == 0) {
+            if (g_relay && ch_relay_ready() != 1)
+                show_status("Can't reach the relay. Check the connection, then press End Turn.");
+            else
+                show_status("New online game: you play turn 1. Give your orders and press End Turn.");
+        } else {
+            show_status("Waiting for player A's first turn. Press End Turn to wait for it here.");
+        }
+        fprintf(stderr, "[turns] map start: no turn files yet\n");
+        return;
+    }
+    if (!seq_is_mine(n)) {
+        const uint32_t len = read_file(n);
+        if (!len) { show_status(""); return; }
+        g_want = n;
+        const int over = finish_load(cpu, len);
+        fprintf(stderr, "[turns] map start: caught up with turn file %u; my turn\n", (unsigned)n);
+        if (over) {
+            show_status("This online game is over.");
+        } else {
+            snprintf(msg, sizeof msg, "Caught up with player %c's turn. It's your turn.", other);
+            show_status(msg);
+        }
+        return;
+    }
+    const int r = load_own_file(cpu, n);
+    if (!r) { show_status(""); return; }
+    g_prev_hash = 0;
+    if (r == 2) {
+        g_over = 1;
+        show_status("This online game is over.");
+    } else {
+        snprintf(msg, sizeof msg, "It's player %c's turn. Close the game, or press End Turn to wait.", other);
+        show_status(msg);
+    }
+    fprintf(stderr, "[turns] map start: my turn file %u is the newest; waiting for player %c\n",
+            (unsigned)n, other);
+}
+
+/* 0x800333F8: the last step of the map start (0x8003188C), called from
+ * nowhere else. The tables are set up (new map) or loaded (from a save). */
+void ch_remote_lle_func_800333F8(CPUState *cpu);
+void func_800333F8(CPUState *cpu)
+{
+    if (cpu->pc == 0 && ch_turns_active())
+        catch_up_at_map_start(cpu);
+    ch_remote_lle_func_800333F8(cpu);
 }

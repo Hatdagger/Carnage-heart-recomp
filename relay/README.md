@@ -15,8 +15,16 @@ The free plan allows 1,000 stored turn files a day and 100,000 reads a day, far 
 
 (Developers can deploy from a terminal instead: `npx wrangler deploy` in this folder, after putting the KV namespace id in `wrangler.toml`.)
 
+## Telling the game where the relay is
+Players use the launcher: **ONLINE PLAY → ONLINE CAMPAIGN** (NEW GAME, JOIN A GAME, PLAY). The launcher needs the relay address, from the first of these that is set:
+1. the `CH_TURN_RELAY` switch;
+2. the first line of `online-turns/relay.txt` beside the game (handy for testing: just paste the address in);
+3. the address built into the game with `-DCH_TURN_RELAY_URL=https://ch-turns.<your-name>.workers.dev` (for releases, so players need to do nothing).
+
+Each game remembers the relay it was made on, so changing the address later does not break games in progress. The launcher keeps the games and keys in `online-turns/games.txt`.
+
 ## How the game uses it
-Until the launcher has an Online screen, the game takes these switches:
+The launcher starts the game with these switches (they can also be set by hand):
 
 | Switch | What |
 |---|---|
@@ -25,7 +33,7 @@ Until the launcher has an Online screen, the game takes these switches:
 | `CH_TURN_KEY` | this player's key |
 | `CH_TURN_ROLE` | `A` (created the game) or `B` (joined it) |
 
-The game keeps the turn files in `online-turns/<code>/` beside it, uploads its own as soon as it sends a turn, and fetches the opponent's while it waits (`src/turn_relay.c`, using the system's curl).
+The game keeps the turn files in `online-turns/<code>/` beside it. When it starts it fetches every turn file the folder lacks (so a new computer catches up), uploads its own as soon as it sends a turn, and fetches the opponent's while it waits (`src/turn_relay.c`, using the system's curl). The launcher also uploads any turn file the game could not send.
 
 Creating and joining by hand (the launcher will do this):
 ```sh

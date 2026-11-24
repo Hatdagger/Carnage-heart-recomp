@@ -8,6 +8,12 @@
  *   - the turn file the game is waiting for is downloaded into the folder
  *     (as .part, then renamed, so the game never reads half a file).
  *
+ * When it starts it first catches up: it asks the relay for its newest turn
+ * file and downloads every one the folder does not have (all of them on a
+ * new computer). Until that has worked once, turn_files.c will not start a
+ * new game, so player A on an empty folder never overwrites a game in
+ * progress.
+ *
  * It runs on its own thread and never holds up the game. Network access goes
  * through the system's own curl (as the launcher's updater does): Windows 10+
  * and desktop Linux ship one, so the game carries no TLS code.
@@ -40,6 +46,9 @@ static char g_url[512], g_game[32], g_key[128], g_dir[512];
 static int g_role;
 static volatile uint32_t g_want;     /* the file the game is waiting for (0: none) */
 static volatile int g_started;
+static volatile int g_ready;         /* 1: caught up with the relay, -1: could not reach it yet */
+static volatile uint32_t g_latest;   /* newest turn file on the relay (when g_ready == 1) */
+static volatile uint32_t g_uploaded; /* my files up to here are on the relay */
 
 static void sleep_ms(int ms)
 {
@@ -88,6 +97,26 @@ static int run_curl(const char *const *args)
     if (waitpid(pid, &st, 0) < 0) return -1;
     return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
 #endif
+}
+
+/* Make a folder and any missing folders above it. */
+static void make_dirs(const char *dir)
+{
+    char p[512];
+    snprintf(p, sizeof p, "%s", dir);
+    for (char *c = p + 1; ; c++) {
+        const char ch = *c;
+        if (ch == '/' || ch == '\\' || ch == 0) {
+            *c = 0;
+#ifdef _WIN32
+            _mkdir(p);
+#else
+            mkdir(p, 0755);
+#endif
+            *c = ch;
+        }
+        if (!ch) break;
+    }
 }
 
 static void path_for(char *out, size_t n, uint32_t seq)
@@ -148,6 +177,43 @@ static int download(uint32_t seq)
     return 1;
 }
 
+/* Ask the relay for its newest turn file and fetch every one the folder is
+ * missing. Returns 1 when that worked. */
+static int catch_up(void)
+{
+    char url[700], out[600];
+    snprintf(url, sizeof url, "%s/v1/games/%s", g_url, g_game);
+    snprintf(out, sizeof out, "%s/.relay-status.json", g_dir);
+    const char *args[] = { "-sf", "--connect-timeout", "5", "--max-time", "15", "-o", out, url, NULL };
+    const int rc = run_curl(args);
+    char buf[512] = { 0 };
+    FILE *f = rc == 0 ? fopen(out, "rb") : NULL;
+    if (f) { const size_t got = fread(buf, 1, sizeof buf - 1, f); buf[got] = 0; fclose(f); }
+    remove(out);
+    const char *p = strstr(buf, "\"latest\":");
+    if (!p) {
+        fprintf(stderr, "[relay] could not reach the relay to catch up (curl %d); will retry\n", rc);
+        return 0;
+    }
+    const uint32_t latest = (uint32_t)strtoul(p + 9, NULL, 10);
+    for (uint32_t s = 1; s <= latest; s++) {
+        char path[600];
+        path_for(path, sizeof path, s);
+        if (file_exists(path)) continue;
+        if (!download(s)) {
+            fprintf(stderr, "[relay] could not fetch turn file %u to catch up; will retry\n", (unsigned)s);
+            return 0;
+        }
+    }
+    /* My files the relay already has need no upload. */
+    uint32_t up = 0;
+    for (uint32_t s = 1; s <= latest; s++) if (is_mine(s)) up = s;
+    g_uploaded = up;
+    g_latest = latest;
+    fprintf(stderr, "[relay] caught up: the relay has %u turn file(s)\n", (unsigned)latest);
+    return 1;
+}
+
 #ifdef _WIN32
 static DWORD WINAPI relay_thread(LPVOID arg)
 #else
@@ -155,16 +221,20 @@ static void *relay_thread(void *arg)
 #endif
 {
     (void)arg;
-    uint32_t uploaded = 0;     /* my files up to here are on the relay */
+    while (!catch_up()) {
+        g_ready = -1;
+        sleep_ms(3000);
+    }
+    g_ready = 1;
     for (;;) {
         /* Upload my files the relay does not have yet (oldest first). */
         for (uint32_t s = 1;; s++) {
             char p[600];
             path_for(p, sizeof p, s);
             if (!file_exists(p)) break;
-            if (!is_mine(s) || s <= uploaded) continue;
+            if (!is_mine(s) || s <= g_uploaded) continue;
             if (!upload(s)) break;
-            uploaded = s;
+            g_uploaded = s;
         }
         /* Fetch the file the game is waiting for. */
         const uint32_t want = g_want;
@@ -193,19 +263,11 @@ int ch_relay_start(int role, const char *dir, char *dir_out, size_t dir_n)
     snprintf(g_game, sizeof g_game, "%s", gm);
     snprintf(g_key, sizeof g_key, "%s", k);
     g_role = role;
-    if (dir && *dir) {
+    if (dir && *dir)
         snprintf(g_dir, sizeof g_dir, "%s", dir);
-    } else {
-#ifdef _WIN32
-        _mkdir("online-turns");
+    else
         snprintf(g_dir, sizeof g_dir, "online-turns/%s", g_game);
-        _mkdir(g_dir);
-#else
-        mkdir("online-turns", 0755);
-        snprintf(g_dir, sizeof g_dir, "online-turns/%s", g_game);
-        mkdir(g_dir, 0755);
-#endif
-    }
+    make_dirs(g_dir);
     snprintf(dir_out, dir_n, "%s", g_dir);
     if (!g_started) {
         g_started = 1;
@@ -223,3 +285,17 @@ int ch_relay_start(int role, const char *dir, char *dir_out, size_t dir_n)
 
 /* The game is now waiting for turn file seq (0: not waiting). */
 void ch_relay_want(uint32_t seq) { g_want = seq; }
+
+/* 1: the folder has caught up with the relay; -1: the relay could not be
+ * reached yet (still trying); 0: not tried yet. */
+int ch_relay_ready(void) { return g_ready; }
+
+/* Wait (at most ms) until the first catch-up has worked or failed once. */
+int ch_relay_wait_ready(int ms)
+{
+    for (int t = 0; g_ready == 0 && t < ms; t += 50) sleep_ms(50);
+    return g_ready;
+}
+
+/* My turn files up to this number are on the relay. */
+uint32_t ch_relay_uploaded(void) { return g_uploaded; }

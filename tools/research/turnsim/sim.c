@@ -7,7 +7,11 @@
  * not the game itself. Run two copies, one per player, on one folder:
  *   run.sh   (builds, plays A and B against each other, checks the logs)
  *
- * sim <A|B> <turns> : plays <turns> End Turns, printing PRE/POST lines.
+ * sim <A|B> <turns> : opens the map (the map-start hook catches up), then
+ * plays <turns> End Turns, printing PRE/POST lines.
+ * SIM_QUIT_WAITING=1: close the game while waiting after the last End Turn
+ * (the turn is sent; the opponent's is not there yet).
+ * SIM_DELAY_MS=n: think for n ms before each End Turn.
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -16,6 +20,8 @@
 #include <time.h>
 #include "cpu_state.h"
 static long g_frames_waited;
+static int g_last_turn;            /* the End Turn being played is the last one */
+static char g_status[160];
 
 #define GP_TURN         0x800DF37Cu
 #define GP_TURN2        0x800DF380u
@@ -43,7 +49,7 @@ static CPUState C = { .read_word = rw, .write_word = ww, .read_half = rh,
 /* The hooks under test. */
 void func_8001B8EC(CPUState *); void func_8001C268(CPUState *); void func_8001BCB0(CPUState *);
 void func_8008A2B8(CPUState *); void func_8001CF48(CPUState *); void func_80035CD4(CPUState *);
-void func_80035988(CPUState *);
+void func_80035988(CPUState *); void func_800333F8(CPUState *);
 
 #define U(i) (UNITS + (i) * 22u)
 #define O(k) (OKES + (k) * 12u)
@@ -119,12 +125,23 @@ void ch_remote_lle_func_8001B8EC(CPUState *c)
         c->pc = 0x8008A2B8u;            /* VSync returns to the hook's entry */
         func_8008A2B8(c);
         g_frames_waited = frames + 1;
+        if (g_last_turn && frames > 3 && getenv("SIM_QUIT_WAITING")) {
+            printf("QUIT while waiting: %s\n", g_status);
+            fflush(stdout);
+            exit(0);
+        }
     }
     if (c->gpr[16] != 0x5150 || c->gpr[31] != 0x8001BAAA) {
         fprintf(stderr, "SIM: registers not put back after waiting\n"); exit(2);
     }
 }
-void host_osd_set_status(const char *msg) { (void)msg; }
+void host_osd_set_status(const char *msg)
+{
+    if (strcmp(msg, g_status) == 0) return;
+    snprintf(g_status, sizeof g_status, "%s", msg);
+    if (*msg) printf("STATUS %s\n", msg);
+}
+void ch_remote_lle_func_800333F8(CPUState *c) { (void)c; }
 void ch_remote_lle_func_8001C268(CPUState *c) { (void)c; g_cpu_ai_ran++; }
 void ch_remote_lle_func_8001BCB0(CPUState *c) { (void)c; }
 void ch_remote_lle_func_8008A2B8(CPUState *c) { (void)c; }
@@ -204,7 +221,21 @@ int main(int argc, char **argv)
     const int turns = atoi(argv[2]);
     init(role);
     setvbuf(stdout, NULL, _IONBF, 0);
+    /* The map opens: catch up with the newest turn file. */
+    C.pc = 0;
+    func_800333F8(&C);
+    if (strncmp(g_status, "Caught up", 9) == 0) {
+        /* Same lines as a receive-only End Turn would print. */
+        print_side("PRE", 1);
+        print_side("POST", 1);
+        print_side("POST", 0);
+    } else if (strncmp(g_status, "It's player", 11) == 0) {
+        print_side("OWN", 1);
+    }
+    const char *delay = getenv("SIM_DELAY_MS");
     for (int n = 0; n < turns; n++) {
+        if (delay) { struct timespec ts = { atoi(delay) / 1000, (atoi(delay) % 1000) * 1000000L }; nanosleep(&ts, NULL); }
+        g_last_turn = n == turns - 1;
         play();
         C.pc = 0;
         func_8001B8EC(&C);

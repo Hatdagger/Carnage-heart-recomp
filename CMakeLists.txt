@@ -126,6 +126,7 @@ psxrecomp_select_guest_implementation(
     GENERATED_SOURCES ${_ch_game_shards}
     SYMBOLS func_8001CF48 func_80035CD4 func_80035988
             func_8001B8EC func_8001C268 func_8001BCB0 func_8008A2B8
+            func_800333F8
     HLE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/remote_battle.c"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/hotseat.c"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/turn_files.c"

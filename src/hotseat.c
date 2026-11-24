@@ -175,6 +175,14 @@ static void setup(CPUState *cpu)
             n, cpu->read_word(GP_FUNDS_PLAYER));
 }
 
+/* Turn files: set up as soon as the map opens, so the newest turn file can
+ * be loaded before the player gives any orders (turn_files.c). */
+void ch_hotseat_setup_now(CPUState *cpu)
+{
+    if (ch_hotseat_active() && !g_ready)
+        setup(cpu);
+}
+
 static void snapshot_waiting_side(CPUState *cpu)
 {
     const uint32_t okes  = cpu->read_word(PTR_OKE_TABLE);

@@ -13,6 +13,13 @@ public class GameActivity extends SDLActivity {
      *  the GPU first and drops to software if it lacks what the renderer needs. */
     static final String RENDERER_GPU = "opengl";
     static final String RENDERER_SOFTWARE = "software";
+    /** GPU internal resolution from the start screen: "2x", "3x" or "4x". */
+    static final String EXTRA_SCALE = "scale";
+
+    private String scale() {
+        String s = getIntent() != null ? getIntent().getStringExtra(EXTRA_SCALE) : null;
+        return ("2x".equals(s) || "3x".equals(s)) ? s : "4x";
+    }
 
     private String renderer() {
         String r = getIntent() != null ? getIntent().getStringExtra(EXTRA_RENDERER) : null;
@@ -29,11 +36,13 @@ public class GameActivity extends SDLActivity {
     protected String[] getArguments() {
         File cue = GameFiles.findDisc(GameFiles.discDir(this));
         if (cue == null) {
-            return new String[] { "--no-launcher", "--renderer", renderer() };
+            return new String[] { "--no-launcher", "--renderer", renderer(),
+                                  "--android-scale", scale() };
         }
         return new String[] {
             "--no-launcher",
             "--renderer", renderer(),
+            "--android-scale", scale(),
             "--disc", cue.getAbsolutePath(),
         };
     }

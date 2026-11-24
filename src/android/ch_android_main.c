@@ -170,6 +170,18 @@ int SDL_main(int argc, char *argv[])
 
     /* PLAY asks for the OpenGL renderer; PLAY (SOFTWARE RENDERER) for software.
      * Without the GPU features it needs, OpenGL becomes software here. */
+    /* "--android-scale 2x|3x|4x" from the start screen's SHARPNESS button
+     * (GPU renderer only). Removed here: the runtime doesn't know it. */
+    const char *scale = "4x";
+    for (int i = 1; i + 1 < argc; i++) {
+        if (!strcmp(args[i], "--android-scale")) {
+            const char *v = args[i + 1];
+            if (!strcmp(v, "2x") || !strcmp(v, "3x") || !strcmp(v, "4x")) scale = v;
+            for (int j = i; j + 2 <= argc; j++) args[j] = args[j + 2];
+            argc -= 2;
+            break;
+        }
+    }
     int gpu = 0;
     for (int i = 1; i + 1 < argc; i++) {
         if (!strcmp(args[i], "--renderer") && !strcmp(args[i + 1], "opengl")) {
@@ -187,10 +199,21 @@ int SDL_main(int argc, char *argv[])
         /* 4x (960 lines; 4096x2048 VRAM surface) is sharp on a 1600-line
          * panel. Fixed here so a "Match display" setting carried over from
          * a PC can't ask the tablet GPU for more. */
-        setenv("PSX_INTERNAL_RESOLUTION", "4x", 0);
+        setenv("PSX_INTERNAL_RESOLUTION", scale, 0);
+        /* Test 6b log: at 4x the GL work ran on the emulation thread
+         * (render_busy 0 %, emu_busy ~90 % in menus, 100 % and 46-54 fps
+         * with audio underruns in battles). The runtime's render thread
+         * draws the frame while the guest runs the next one. */
+        setenv("PSX_RENDER_THREAD", "1", 0);
+        /* Driver vsync on the 144 Hz panel made each present wait for a
+         * panel refresh on top of the 59.94 Hz wall-clock pacer. The pacer
+         * alone keeps the speed (vsync 0 = pacer only). */
+        setenv("PSX_VSYNC", "0", 0);
     }
-    printf("Carnage Heart (Android): renderer %s\n",
-           gpu ? "OpenGL ES (4x internal resolution)" : "software (native resolution)");
+    printf("Carnage Heart (Android): renderer %s%s%s\n",
+           gpu ? "OpenGL ES (" : "software (native resolution)",
+           gpu ? scale : "",
+           gpu ? " internal resolution, render thread on, vsync off / pacer only)" : "");
 
     int rc = ch_android_real_main(argc, args);
     printf("Carnage Heart (Android): main returned %d\n", rc);

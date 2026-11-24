@@ -47,6 +47,7 @@ public class SetupActivity extends Activity {
     private Button pickButton;
     private Button playButton;
     private Button playSoftButton;
+    private Button scaleButton;
     private Button shareButton;
     private Button saveLogButton;
     private boolean busy;
@@ -128,6 +129,22 @@ public class SetupActivity extends Activity {
         pp.topMargin = dp(24);
         root.addView(playButton, pp);
         playButton.setVisibility(View.GONE);
+
+        // Sharpness of the GPU renderer: 4x (sharpest) -> 3x -> 2x (lightest).
+        // Remembered between runs; lower it if battles stutter or crackle.
+        scaleButton = new Button(this);
+        scaleButton.setTextSize(14);
+        updateScaleButton();
+        scaleButton.setOnClickListener(v -> {
+            String s = scale();
+            String next = "4x".equals(s) ? "3x" : "3x".equals(s) ? "2x" : "4x";
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_SCALE, next).apply();
+            updateScaleButton();
+        });
+        LinearLayout.LayoutParams sc = wrap();
+        sc.topMargin = dp(8);
+        root.addView(scaleButton, sc);
+        scaleButton.setVisibility(View.GONE);
 
         // The CPU renderer of test APK 5 (native resolution), in case the
         // GPU renderer misbehaves on a device.
@@ -351,6 +368,7 @@ public class SetupActivity extends Activity {
         setStatus("Ready.", false);
         playButton.setVisibility(View.VISIBLE);
         playSoftButton.setVisibility(View.VISIBLE);
+        scaleButton.setVisibility(View.VISIBLE);
         File log = logFile();
         int logVis = log.isFile() && log.length() > 0 ? View.VISIBLE : View.GONE;
         shareButton.setVisibility(logVis);
@@ -436,8 +454,23 @@ public class SetupActivity extends Activity {
     private void startGame(String renderer) {
         Intent i = new Intent(this, GameActivity.class);
         i.putExtra(GameActivity.EXTRA_RENDERER, renderer);
+        i.putExtra(GameActivity.EXTRA_SCALE, scale());
         startActivity(i);
         finish();
+    }
+
+    static final String PREFS = "settings";
+    static final String PREF_SCALE = "gpu_scale";
+
+    private String scale() {
+        String s = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_SCALE, "4x");
+        return ("2x".equals(s) || "3x".equals(s)) ? s : "4x";
+    }
+
+    private void updateScaleButton() {
+        String s = scale();
+        String what = "4x".equals(s) ? "sharpest" : "3x".equals(s) ? "lighter" : "lightest";
+        scaleButton.setText("SHARPNESS: " + s + " (" + what + ") - tap to change");
     }
 
     private int dp(int v) {

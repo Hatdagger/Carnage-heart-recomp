@@ -9,6 +9,8 @@ See also [VS_MODE_AND_SAVES.md](VS_MODE_AND_SAVES.md) and [MULTIPLAYER_PLAN.md](
 |---|---|---|---|
 | 0x800DF37C | 36 | Turn counter (shown on screen), clamped 1..9999 | Verified |
 | 0x800DF380 | 40 | Second turn counter, clamped 1..999 | Verified |
+| 0x800DF384 | 44 | **Scenario**: 0 Europa (Practice), 1 Europa, 2 Ganymede, 3 Callisto | Verified (all four started; map set-up `0x80037240(scenario, map)`) |
+| 0x800DF388 | 48 | **Map number** within the scenario, from 0 (the save title shows it + 1, "Map1") | Very likely (read with the scenario by the next-map routine `0x80036C70`) |
 | 0x800DF368 / 0x800DF36C | 16 / 20 | Menu pointer x / y (s32, screen pixels). Writing them moves the pointer | Verified |
 | 0x800DF38C | 52 | Player funds | Verified (500000 at start) |
 | 0x800DF390 | 56 | CPU funds (drops when the CPU forms units; end-turn income added here, capped 9,999,999) | Very likely |

@@ -32,6 +32,23 @@ play "$d" A $turns "$d/A.log" & wait $!
 kill $pb 2>/dev/null || true; wait 2>/dev/null || true
 python3 "$here/check.py" "$d/A.log" "$d/B.log"
 
+# The scenario check: the wrong scenario loads and sends nothing, and the
+# map is then a normal campaign (the CPU brain runs again: exit code 3).
+echo "== the wrong scenario"
+n_before=$(ls "$d"/turn-*.cht | wc -l)
+st=0; SIM_SCENARIO=1 CH_TURN_DIR="$d" CH_TURN_ROLE=B "$bin" B 2 > "$d/W.log" 2> "$d/W.log.err" || st=$?
+grep -q 'STATUS This online game is on Europa (Practice). Restart and choose Europa (Practice).' "$d/W.log" \
+    && grep -q 'online play is off' "$d/W.log.err" && [ "$st" = 3 ] \
+    && [ "$(ls "$d"/turn-*.cht | wc -l)" = "$n_before" ] && ! grep -q 'loaded' "$d/W.log.err" \
+    || { echo "FAIL a copy on Europa joined a Europa (Practice) game"; cat "$d/W.log" "$d/W.log.err"; exit 1; }
+echo "ok   a copy started on Europa was told to start Europa (Practice), and loaded and sent nothing"
+d2=$(mktemp -d); st=0
+SIM_SCENARIO=2 CH_TURN_DIR="$d2" CH_TURN_ROLE=A "$bin" A 2 > "$d2/W.log" 2> "$d2/W.log.err" || st=$?
+grep -q 'STATUS Online games are Europa (Practice) only for now' "$d2/W.log" && [ "$st" = 3 ] \
+    && ! ls "$d2"/turn-*.cht > /dev/null 2>&1 \
+    || { echo "FAIL a new online game started on Ganymede"; cat "$d2/W.log" "$d2/W.log.err"; exit 1; }
+echo "ok   a new online game on Ganymede was refused, and no turn file was written"
+
 echo "== B restarts after loading turn file 7"
 d=$(mktemp -d)
 play "$d" B 4 "$d/B1.log" & pb=$!  # quits after sending file 6 (and loading 7)
@@ -43,6 +60,9 @@ wait $pa; kill $pb 2>/dev/null || true; wait 2>/dev/null || true
 grep -q 'map start: caught up with turn file 7' "$d/B2.log.err" || { echo "FAIL B2 did not catch up at the map start"; exit 1; }
 first=$(grep -m1 'loaded turn file' "$d/B2.log.err" | sed 's/.*turn file \([0-9]*\).*/\1/')
 echo "B came back and caught up with turn file $first when the map opened"
+grep -q 'map start: Europa (Practice), as in the turn files' "$d/B2.log.err" \
+    || { echo "FAIL B's map start did not check the scenario"; exit 1; }
+echo "ok   B's map start checked the scenario against the turn files"
 python3 "$here/check.py" "$d/A.log" "$d/B2.log" $(( (first - 1) / 2 ))
 grep -h 'DESYNC\|ERROR' "$d"/*.err && exit 1
 grep -h 'END' "$d"/*.log

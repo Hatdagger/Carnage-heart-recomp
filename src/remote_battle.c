@@ -123,6 +123,13 @@ void func_8001CF48(CPUState *cpu)
     ch_remote_lle_func_8001CF48(cpu);
 }
 
+/* Turn files switch remote battles off when the wrong scenario was started
+ * (the map is then a normal campaign). */
+void ch_remote_battle_off(void)
+{
+    g_enabled = 0;
+}
+
 /* Campaign battle set-up: a0 = side-1 (player) unit, a1 = side-2 unit. */
 void func_80035CD4(CPUState *cpu)
 {

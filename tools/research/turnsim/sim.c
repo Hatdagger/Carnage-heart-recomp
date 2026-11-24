@@ -12,6 +12,8 @@
  * SIM_QUIT_WAITING=1: close the game while waiting after the last End Turn
  * (the turn is sent; the opponent's is not there yet).
  * SIM_DELAY_MS=n: think for n ms before each End Turn.
+ * SIM_SCENARIO=n, SIM_MAP=m: the scenario and map that were started (default
+ * 0 and 0, Europa (Practice)).
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -142,7 +144,7 @@ void host_osd_set_status(const char *msg)
     if (*msg) printf("STATUS %s\n", msg);
 }
 void ch_remote_lle_func_800333F8(CPUState *c) { (void)c; }
-void ch_remote_lle_func_8001C268(CPUState *c) { (void)c; g_cpu_ai_ran++; }
+void ch_remote_lle_func_8001C268(CPUState *c) { g_cpu_ai_ran++; c->pc = c->gpr[31]; }
 void ch_remote_lle_func_8001BCB0(CPUState *c) { (void)c; }
 void ch_remote_lle_func_8008A2B8(CPUState *c) { (void)c; }
 void ch_remote_lle_func_8001CF48(CPUState *c) { (void)c; }
@@ -172,6 +174,8 @@ static void init(int role)
     memset(ram, 0, sizeof ram);
     ww(PTR_PLAYER_CARD, CARDS); ww(PTR_OKE_TABLE, OKES); ww(PTR_BASE_TABLE, BASES); ww(PTR_UNIT_TABLE, UNITS);
     ww(GP_TURN, 1); ww(GP_TURN2, 1); ww(GP_FUNDS_PLAYER, 500000); ww(GP_FUNDS_CPU, 300000);
+    if (getenv("SIM_SCENARIO")) ww(0x800DF384u, (uint32_t)atoi(getenv("SIM_SCENARIO")));
+    if (getenv("SIM_MAP")) ww(0x800DF388u, (uint32_t)atoi(getenv("SIM_MAP")));
     for (int c = 0; c < 28; c++) {   /* designs: marked by player and slot */
         memset(ram + ((CARDS + c * 1152u) & 0x1FFFFF), (role ? 0xB0 : 0xA0) + (c & 15), 1152);
         wh(CARDS + c * 1152u + 52, 520);

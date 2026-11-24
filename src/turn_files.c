@@ -63,7 +63,15 @@
  * line says when the turn file is on it. The launcher also sends any turn
  * file the game could not (launcher/ch_online.cpp).
  *
- * File layout (version 1, little-endian), 48-byte header then the body:
+ * Scenario check: every turn file says which scenario and map it was played
+ * on (0x800DF384 and 0x800DF388). When the map opens, the game compares them
+ * with the scenario the player actually started. If they differ, or a new
+ * online game is started on a scenario that online play does not support
+ * yet (only Europa (Practice), CH_ONLINE_SCENARIOS), nothing is loaded or
+ * sent: the bottom line says which scenario to start, and online play is
+ * off until the game is restarted (the map plays as a normal campaign).
+ *
+ * File layout (version 2, little-endian), 52-byte header then the body:
  *    0  4  "CHTF"
  *    4  2  version (1)
  *    6  1  sender role (0 = A, 1 = B)
@@ -75,6 +83,10 @@
  *   28  8  hash of this file's tables
  *   36  8  hash of the whole body
  *   44  4  body length
+ *   48  1  scenario (0x800DF384: 0 Europa (Practice), 1 Europa, 2 Ganymede,
+ *          3 Callisto)
+ *   49  1  map number within the scenario (0x800DF388, from 0)
+ *   50  2  0 (spare)
  *   body:  tables  = receiver funds (4), sender funds (4), units 64 x 22,
  *                    bases 16 x 92, OKEs 200 x 12 (receiver's point of view)
  *          sender's design cards, 28 x 1152
@@ -98,6 +110,8 @@
 
 #define GP_TURN         0x800DF37Cu
 #define GP_TURN2        0x800DF380u
+#define GP_SCENARIO     0x800DF384u   /* 0 Europa (Practice), 1 Europa, 2 Ganymede, 3 Callisto */
+#define GP_MAP          0x800DF388u   /* map number within the scenario, from 0 */
 #define GP_FUNDS_PLAYER 0x800DF38Cu
 #define GP_FUNDS_CPU    0x800DF390u
 #define GP_CUR_BASE     0x800DF404u
@@ -113,8 +127,14 @@
 #define UNIT_SIZE       22u
 #define UNIT_COUNT      64
 
-#define TF_VERSION      1
-#define TF_HEADER       48u
+#define TF_VERSION      2
+#define TF_HEADER       52u
+
+/* Scenarios online play supports, one bit per scenario number. For now only
+ * Europa (Practice). */
+#ifndef CH_ONLINE_SCENARIOS
+#define CH_ONLINE_SCENARIOS 0x1u
+#endif
 #define TF_TABLES       (8u + UNIT_COUNT * UNIT_SIZE + BASE_COUNT * BASE_SIZE + OKE_COUNT * OKE_SIZE)
 #define TF_CARDS        (CARD_SLOTS * CARD_SIZE)
 #define TF_ORDER_SIZE   8u
@@ -135,6 +155,8 @@ static int g_relay;
 /* From hotseat.c: the waiting side's design cards (28 x 1152, flat). */
 uint8_t *ch_hotseat_other_cards(void);
 void ch_hotseat_setup_now(CPUState *cpu);
+void ch_hotseat_off(void);
+void ch_remote_battle_off(void);
 extern void host_osd_set_status(const char *msg);
 
 static int g_on = -1;
@@ -146,6 +168,7 @@ static uint32_t g_next_send;      /* sequence number of my next turn file */
 static uint64_t g_prev_hash;      /* tables hash of the last file loaded */
 static uint32_t g_sent;           /* the last turn file I sent this session */
 static int g_over;                /* the newest turn file ended the game */
+static int g_scen = -1, g_map = -1; /* the scenario and map this copy is playing */
 
 /* My units at the start of my turn, for working out the orders I gave. */
 static uint8_t g_start_units[32][UNIT_SIZE];
@@ -199,6 +222,20 @@ static void wr(CPUState *cpu, uint32_t a, const uint8_t *s, uint32_t n)
 { for (uint32_t i = 0; i < n; i++) cpu->write_byte(a + i, s[i]); }
 
 static uint8_t swap_owner(uint8_t o) { return o == 1 ? 2 : o == 2 ? 1 : o; }
+
+/* "Europa (Practice)", "Ganymede map 2"... (scenarios with one map get no
+ * map number). */
+static const char *scenario_name(int scen, int map)
+{
+    static const char *names[] = { "Europa (Practice)", "Europa", "Ganymede", "Callisto" };
+    static char buf[2][48];
+    static int which;
+    char *b = buf[which ^= 1];
+    const char *n = scen >= 0 && scen < 4 ? names[scen] : "an unknown scenario";
+    if (scen == 0 || map <= 0) snprintf(b, sizeof buf[0], "%s", n);
+    else snprintf(b, sizeof buf[0], "%s map %d", n, map + 1);
+    return b;
+}
 
 static void path_for(char *out, size_t n, uint32_t seq)
 {
@@ -368,6 +405,9 @@ static size_t build_file(CPUState *cpu, int game_over)
     put64(h + 28, tables_hash);
     put64(h + 36, fnv1a(body, body_len));
     put32(h + 44, body_len);
+    h[48] = (uint8_t)cpu->read_word(GP_SCENARIO);
+    h[49] = (uint8_t)cpu->read_word(GP_MAP);
+    h[50] = h[51] = 0;
     return TF_HEADER + body_len;
 }
 
@@ -405,8 +445,13 @@ static uint32_t read_file(uint32_t seq)
     if (!f) return 0;
     const size_t n = fread(g_buf, 1, sizeof g_buf, f);
     fclose(f);
-    if (n < TF_HEADER || memcmp(g_buf, "CHTF", 4) != 0 || get16(g_buf + 4) != TF_VERSION) {
-        fprintf(stderr, "[turns] ERROR: %s is not a version-%d turn file\n", path, TF_VERSION);
+    if (n < 8 || memcmp(g_buf, "CHTF", 4) != 0) {
+        fprintf(stderr, "[turns] ERROR: %s is not a turn file\n", path);
+        return 0;
+    }
+    if (get16(g_buf + 4) != TF_VERSION || n < TF_HEADER) {
+        fprintf(stderr, "[turns] ERROR: %s is a version-%u turn file; this game reads version %d "
+                "(start a new online game)\n", path, (unsigned)get16(g_buf + 4), TF_VERSION);
         return 0;
     }
     const uint32_t len = get32(g_buf + 44);
@@ -417,6 +462,11 @@ static uint32_t read_file(uint32_t seq)
     }
     if (g_buf[6] != (seq & 1u ? 0 : 1)) {
         fprintf(stderr, "[turns] ERROR: %s was written by the wrong player\n", path);
+        return 0;
+    }
+    if (g_scen >= 0 && (g_buf[48] != g_scen || g_buf[49] != g_map)) {
+        fprintf(stderr, "[turns] ERROR: %s was played on %s, but this game is on %s\n", path,
+                scenario_name(g_buf[48], g_buf[49]), scenario_name(g_scen, g_map));
         return 0;
     }
     return len;
@@ -682,6 +732,65 @@ static int load_own_file(CPUState *cpu, uint32_t seq)
     return 1 + (h[7] & 1);
 }
 
+/* Scenario and map of turn file seq, or -1 if it can't be read. */
+static int scenario_of(uint32_t seq, int *map)
+{
+    char path[600];
+    uint8_t h[TF_HEADER];
+    path_for(path, sizeof path, seq);
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+    const size_t n = fread(h, 1, TF_HEADER, f);
+    fclose(f);
+    if (n != TF_HEADER || memcmp(h, "CHTF", 4) != 0 || get16(h + 4) != TF_VERSION) return -1;
+    *map = h[49];
+    return h[48];
+}
+
+/* Online play is off for the rest of this session: the map plays as a
+ * normal campaign against the CPU, and nothing is loaded or sent. */
+static void switch_off(const char *why)
+{
+    fprintf(stderr, "[turns] %s; online play is off until the game is restarted\n", why);
+    if (g_relay) ch_relay_want(0);
+    g_on = 0;
+    g_synced = 0;
+    ch_hotseat_off();
+    ch_remote_battle_off();
+}
+
+/* Is the scenario that was started the right one for this online game?
+ * Returns 0 (and switches online play off) if not. */
+static int check_scenario(CPUState *cpu)
+{
+    char msg[128], why[160];
+    g_scen = (int)cpu->read_word(GP_SCENARIO);
+    g_map = (int)cpu->read_word(GP_MAP);
+    int map = -1, scen = -1;
+    for (uint32_t s = 1; scen < 0 && seq_exists(s); s++)
+        scen = scenario_of(s, &map);
+    if (scen < 0) {
+        /* No turn files yet (or only unreadable ones): a new game. */
+        if (g_scen >= 0 && g_scen < 32 && (CH_ONLINE_SCENARIOS >> g_scen) & 1u) return 1;
+        snprintf(msg, sizeof msg, "Online games are Europa (Practice) only for now. "
+                 "Restart and choose it.");
+        snprintf(why, sizeof why, "map start: %s started, but online games are Europa (Practice) only",
+                 scenario_name(g_scen, g_map));
+    } else if (scen == g_scen && map == g_map) {
+        fprintf(stderr, "[turns] map start: %s, as in the turn files\n", scenario_name(g_scen, g_map));
+        return 1;
+    } else {
+        snprintf(msg, sizeof msg, "This online game is on %s. Restart and choose %s.",
+                 scenario_name(scen, map), scenario_name(scen, map));
+        snprintf(why, sizeof why, "map start: %s started, but this online game is on %s",
+                 scenario_name(g_scen, g_map), scenario_name(scen, map));
+    }
+    g_scen = g_map = -1;
+    switch_off(why);
+    show_status(msg);
+    return 0;
+}
+
 static void catch_up_at_map_start(CPUState *cpu)
 {
     if (g_relay) {
@@ -690,6 +799,8 @@ static void catch_up_at_map_start(CPUState *cpu)
         if (r != 1)
             fprintf(stderr, "[turns] map start: could not reach the relay; using the turn files here\n");
     }
+    if (!check_scenario(cpu))
+        return;
     ch_hotseat_setup_now(cpu);
     g_synced = 0;
     g_receive_only = 0;

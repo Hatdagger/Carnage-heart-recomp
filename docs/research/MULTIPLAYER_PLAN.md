@@ -108,7 +108,7 @@ What this does not do yet: the player still has to keep the game open until the 
 Known gaps:
 - Research/negotiation (still unmapped) is not in the file; each copy keeps its own. The CPU's research still spends the waiting side's funds on every End Turn (up to about 80000 a turn in the tests); hot-seat puts them back, so it does no harm, but it is wasted work.
 - Hot-seat's gaps still apply (kills of the other side's OKEs go to the CPU card records).
-- Each copy uses its own save for its own designs; there is no check that both started the same scenario.
+- Each copy uses its own save for its own designs. (The scenario check was added on 2026-11-24, step 6d.)
 - The "waiting" status line was not seen on screen in the test (headless copies draw no window); the log lines were.
 
 ### Turn-file storage: a small relay, built (2026-11-23, step 6b)
@@ -148,9 +148,22 @@ So nobody needs the "press End Turn once to catch up" step any more, and orders 
 - Not tested: the launcher in a real window (no screen here) and a real Cloudflare relay.
 
 Known gaps:
-- The map start does not check which scenario was started. Starting a map other than Europa (Practice) in an online game would load the Europa state into it. To add: the scenario number in the turn file.
+- ~~The map start does not check which scenario was started~~ (done, step 6d below).
 - If player A's very first End Turn happens while the relay can't be reached, that End Turn waits for the relay and then ends without sending; A presses End Turn again to play turn 1 (production ran once for nothing).
 - Desktop only for now; the Android notifications need chat C's APK.
+
+### Scenario check (2026-11-24, step 6d)
+**Found**: the scenario is kept at `0x800DF384` (gp+44): 0 Europa (Practice), 1 Europa, 2 Ganymede, 3 Callisto; the map number within the scenario is next to it at `0x800DF388` (gp+48, from 0). Found by starting each of the four scenarios from a fresh boot and comparing memory; confirmed by the code: the next-map routine `0x80036C70` calls the map set-up `0x80037240(scenario, map)` with exactly these two, and the save/new-game code (`0x80039340`, `0x8007DD5C`) writes both.
+
+**Built** (`src/turn_files.c`): turn files are now **version 2**, with the scenario and map number in the header (bytes 48 and 49; the header grew from 48 to 52 bytes). When the map opens, before anything is loaded:
+- **A game in progress on another scenario or map** (for example the turn files are Europa (Practice) but the player started Europa): nothing is loaded and nothing will be sent. The bottom line says "This online game is on Europa (Practice). Restart and choose Europa (Practice)." and online play is off until the game is restarted; the map plays as a normal campaign against the CPU, so the player's turn files are never touched.
+- **A new online game on a scenario online play doesn't support yet**: the same, with "Online games are Europa (Practice) only for now. Restart and choose it." Which scenarios are allowed is one setting (`CH_ONLINE_SCENARIOS`, a bit per scenario; now only bit 0, Europa (Practice)).
+- Every turn file read is also checked against the scenario being played, as a safety net.
+- Older version-1 turn files are refused with a message to start a new online game (only test games used them).
+
+Why "switch off" rather than "refuse to start": the map is already open when the check runs, and a normal campaign is a safe state that can't damage the online game. The player only needs to restart and pick the right scenario.
+
+**Tested**: simulator (`turnsim/run.sh`, two new cases: a copy started on Europa against a Europa (Practice) game loads and sends nothing; a new game started on Ganymede writes no turn file); the real two-copy online test (`online_demo.py`) still plays through to victory/defeat with no desyncs, and its logs show "map start: Europa (Practice), as in the turn files"; and in the real game, a copy started on Europa against that game's turn files said "Europa started, but this online game is on Europa (Practice)", loaded nothing and wrote no file, and its End Turn ran as a normal campaign. (The bottom line itself is not in headless screenshots; the log shows it was set.)
 
 ### Saves and memory cards: mapped (2026-11-22)
 A campaign save is one 5-block file whose body is a straight copy of the campaign tables in RAM (cards, units, bases, OKEs, globals). No checksum found. A single design is one 1152-byte record at a known offset. See VS_MODE_AND_SAVES.md.
@@ -177,11 +190,27 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 3. ~~Map the player order screens (including re-orders) and factory data~~ (done 2026-11-22).
 4. ~~Local hot-seat test on one machine: end turn, swap sides, play the other side~~ (done 2026-11-22, `src/hotseat.c`).
 5. ~~Turn files: capture orders and battle results on one copy, apply them on a second copy~~ (done 2026-11-22, `src/turn_files.c`; tested in the real game 2026-11-23).
-6. ~~Waiting without freezing the game~~ and ~~storage: the turn relay~~ (done 2026-11-23). ~~Launcher Online screen, closing after sending, catching up on start (also from the relay on a new device), desktop "your turn" check~~ (done 2026-11-24). Next: a real relay test, then Android notifications.
+6. ~~Waiting without freezing the game~~ and ~~storage: the turn relay~~ (done 2026-11-23). ~~Launcher Online screen, closing after sending, catching up on start (also from the relay on a new device), desktop "your turn" check~~ (done 2026-11-24). ~~Scenario check~~ (done 2026-11-24). Next: a real relay test, then Android notifications.
 7. Optional: visual replay of the enemy's turn from the orders in the file.
 8. Later: Options A and B (the card and save layout they need is now mapped).
 
-## Session status (chat B, 2026-11-24)
+## Session status (chat B, 2026-11-24, session 3)
+**Done**
+- Landed session 2's commit (launcher Online screen, catch-up at map start) on `research/vs-battle-and-saves`; pushing works again.
+- Found the scenario (`0x800DF384`) and map number (`0x800DF388`) in RAM.
+- Turn files version 2 carry them; the map start refuses a game on the wrong scenario, and new online games are Europa (Practice) only (`CH_ONLINE_SCENARIOS`). Tested in the simulator and the real game (step 6d above).
+- Sandbox build notes updated (the game code has to be generated from the disc first).
+
+**Next**
+- Owner: set up the relay on Cloudflare (`relay/README.md`) and send the address; then a real online test (`CH_RELAY_URL=<address> python3 tools/research/online_demo.py`) and building the address into releases (`-DCH_TURN_RELAY_URL=`).
+- The launcher could show the scenario on each game's page (it is in byte 48 of the turn files), so players know which one to start.
+- Android notifications after chat C has an APK.
+- Release builds need `-DCH_REMOTE_BATTLE=ON` for the Online Campaign entry to work.
+
+**Blocked**
+- A real (non-local) relay test needs the owner's Cloudflare relay address.
+
+## Session status (chat B, 2026-11-24, session 2)
 **Done**
 - Launcher ONLINE CAMPAIGN screen (on this branch): your games with whose turn it is, NEW GAME, JOIN A GAME by code (controller, keyboard or mouse), PLAY with the relay switches, CHECK AGAIN, FORGET. The main page shows YOUR TURN.
 - The launcher checks the relay when it opens, sends turn files the game could not, and fetches missing ones.

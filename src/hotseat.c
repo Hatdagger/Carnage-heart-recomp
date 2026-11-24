@@ -109,6 +109,13 @@ int ch_hotseat_active(void)
     return g_on;
 }
 
+/* Turn files switch hot-seat off when the wrong scenario was started. */
+void ch_hotseat_off(void)
+{
+    if (g_on > 0) fprintf(stderr, "[hotseat] off\n");
+    g_on = 0;
+}
+
 const uint8_t *ch_hotseat_other_card(int idx)
 {
     return (idx >= 0 && idx < CARD_SLOTS) ? g_other_cards[idx] : NULL;

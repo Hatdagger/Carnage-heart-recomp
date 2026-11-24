@@ -44,4 +44,11 @@ void download_and_apply();    /* only after check() found one */
  * caller then closes the launcher. */
 bool restart_into_rebuild();
 
+/* "Build Android App" (scripts/android, from the Android port): true when
+ * the kit has the builder. start_android_build() opens it in its own console
+ * window (Windows: "Build Android App.bat"; Linux: build-android-app.sh in a
+ * terminal) and returns at once; false with the reason when it can't. */
+bool android_builder_available();
+bool start_android_build(std::string* why);
+
 } /* namespace ch_update */

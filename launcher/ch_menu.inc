@@ -452,7 +452,11 @@ static void draw_update_page(LauncherModel* m, const Gfx& g, const Input& in) {
 
 /* ---- main page ------------------------------------------------------------- */
 
-enum MainEntry { MAIN_LAUNCH = 0, MAIN_ONLINE, MAIN_SHARE, MAIN_UPDATE, MAIN_SETTINGS, MAIN_EXIT };
+enum MainEntry { MAIN_LAUNCH = 0, MAIN_ONLINE, MAIN_SHARE, MAIN_UPDATE, MAIN_ANDROID, MAIN_SETTINGS, MAIN_EXIT };
+
+/* Result of the last BUILD ANDROID APP click, shown under its info text. */
+static std::string g_android_msg;
+static bool g_android_ok = false;
 
 static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
     struct Entry { MainEntry id; const char* label; const char* info; };
@@ -478,6 +482,13 @@ static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
         entries[count++] = { MAIN_UPDATE, "UPDATE",
             "Look for a newer version and install it when you choose. Your disc, "
             "saves and settings are not touched." };
+        if (!install && ch_update::android_builder_available())
+            entries[count++] = { MAIN_ANDROID, "BUILD ANDROID APP",
+                "Make the Android version of your installed game (CarnageHeart.apk) "
+                "for your own phone or tablet. A window opens and shows the "
+                "progress. The first time it downloads the Android tools once "
+                "(large; needs the internet). When it says Finished, copy "
+                "CarnageHeart.apk from the game folder to your device." };
     }
     entries[count++] = { MAIN_SETTINGS, "SETTINGS",
         "Display, sound, controller and mouse." };
@@ -538,6 +549,8 @@ static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
     panel(g, 310.0f, 242.0f, 306.0f, 174.0f, "INFO");
     text(g, 324.0f, 258.0f, 11.0f, kHi, entries[cur].label);
     text(g, 324.0f, 280.0f, 11.0f, kText, entries[cur].info, 278.0f);
+    if (entries[cur].id == MAIN_ANDROID && !g_android_msg.empty())
+        text(g, 324.0f, 398.0f, 11.0f, g_android_ok ? kOn : kWarn, g_android_msg.c_str(), 278.0f);
 
     footer(g, "A / ENTER / LEFT CLICK  SELECT      START  LAUNCH", false);
 
@@ -548,6 +561,12 @@ static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
         case MAIN_ONLINE:   open_page(PAGE_ONLINE); break;
         case MAIN_SHARE:    open_page(PAGE_SHARE); break;
         case MAIN_UPDATE:   open_page(PAGE_UPDATE); break;
+        case MAIN_ANDROID: {
+            std::string why;
+            g_android_ok = ch_update::start_android_build(&why);
+            g_android_msg = g_android_ok ? "BUILD WINDOW OPENED" : why;
+            break;
+        }
         case MAIN_SETTINGS: launcher_model_set_view(m, LNG_VIEW_SETTINGS); break;
         case MAIN_EXIT:     m->action = LNG_ACTION_QUIT; break;
     }

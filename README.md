@@ -72,6 +72,14 @@ No game data or recompiled code is downloaded; everything game-specific comes fr
 
 If setup fails, open `setup-log.txt` in the same folder as the exe. It records every setup step, including the build that runs in a console window after the wizard closes. Send that file when you report a problem.
 
+### Android app
+
+Once the game is installed, the launcher shows **BUILD ANDROID APP**. It opens a window that builds `CarnageHeart.apk` from your installed game (the first time it downloads the Android tools once). When it says Finished, copy `CarnageHeart.apk` from the game folder to your phone or tablet.
+
+<p align="center">
+  <img src="docs/screenshots/launcher-build-android-app.png" alt="Launcher main menu with BUILD ANDROID APP selected" width="400">
+</p>
+
 ## Build from your own disc (developers)
 
 You need your own Redump dump of Carnage Heart (USA): the `.cue` and all three `.bin` tracks.

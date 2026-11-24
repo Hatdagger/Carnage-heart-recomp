@@ -223,7 +223,7 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 
 **Next**
 - Owner: install the test APK on the Legion Tab and try ONLINE CAMPAIGN: NEW GAME, then join it from the PC launcher (or the other way round), play a turn each, and wait for the notification. Then SAVE LOG TO DOWNLOADS and attach the log.
-- Signing: the test APK was signed with a new key (the owner's `carnageheart.keystore` was not attached), so the old test app must be uninstalled first, which removes its imported disc and saves. Attach the keystore to get an APK that installs over the old one.
+- Test APK rebuilt with the owner's key (`carnageheart.keystore`, SHA-256 19:6D:C3:EC...C9:98): installs over the old test app.
 - Hub: merge PR #9 after the device test.
 - Later: visual replay of the enemy's turn (step 7); Options A and B.
 

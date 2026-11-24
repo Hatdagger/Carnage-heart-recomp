@@ -740,7 +740,7 @@ void do_apply() {
     fs::remove_all(dir, ec);
     { std::lock_guard<std::mutex> l(g_mu); g_quick = ok && quick; }
     if (ok && quick)
-        set(State::Done, "VERSION " + latest + " IS INSTALLED. RESTART FOR A QUICK REBUILD (YOUR GAME CODE IS KEPT)");
+        set(State::Done, "VERSION " + latest + " IS INSTALLED. RESTART FOR A QUICK REBUILD");
     else if (ok)
         set(State::Done, "VERSION " + latest + " IS INSTALLED. RESTART TO REBUILD THE GAME WITH IT");
     else

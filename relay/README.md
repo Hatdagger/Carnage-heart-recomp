@@ -19,7 +19,7 @@ The free plan allows 1,000 stored turn files a day and 100,000 reads a day, far 
 Players use the launcher: **ONLINE PLAY → ONLINE CAMPAIGN** (NEW GAME, JOIN A GAME, PLAY). The launcher needs the relay address, from the first of these that is set:
 1. the `CH_TURN_RELAY` switch;
 2. the first line of `online-turns/relay.txt` beside the game (handy for testing: just paste the address in);
-3. the address built into the game with `-DCH_TURN_RELAY_URL=https://ch-turns.<your-name>.workers.dev` (for releases, so players need to do nothing).
+3. the address built into the game: by default the project's relay, `https://ch-turns.surreal64.workers.dev`; change it with `-DCH_TURN_RELAY_URL=<address>` (or `-DCH_TURN_RELAY_URL=` for none).
 
 Each game remembers the relay it was made on, so changing the address later does not break games in progress. The launcher keeps the games and keys in `online-turns/games.txt`.
 

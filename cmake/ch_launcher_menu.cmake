@@ -86,8 +86,9 @@ function(ch_add_launcher_menu TGT)
         PROPERTIES COMPILE_DEFINITIONS "CH_VERSION=\"${_ch_version}\"")
     # Online campaign games (launcher/ch_online.cpp): on when the game has
     # turn files (CH_REMOTE_BATTLE). CH_TURN_RELAY_URL builds in the relay
-    # address; online-turns/relay.txt beside the game overrides it.
-    set(CH_TURN_RELAY_URL "" CACHE STRING "Turn relay address built into the launcher (relay/README.md)")
+    # address (the project's own relay by default, set up 2026-11-24);
+    # online-turns/relay.txt beside the game or CH_TURN_RELAY overrides it.
+    set(CH_TURN_RELAY_URL "https://ch-turns.surreal64.workers.dev" CACHE STRING "Turn relay address built into the launcher (relay/README.md)")
     set(_ch_online "${CMAKE_CURRENT_SOURCE_DIR}/launcher/ch_online.cpp")
     target_sources(${TGT} PRIVATE "${_ch_online}")
     set(_ch_online_defs "CH_TURN_RELAY_DEFAULT=\"${CH_TURN_RELAY_URL}\"")

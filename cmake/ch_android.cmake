@@ -54,6 +54,7 @@ endfunction()
 function(ch_android_finish_target target)
     target_sources(${target} PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_main.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_perf.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_ucontext_aarch64.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_gl_shims.c")
     target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/android")

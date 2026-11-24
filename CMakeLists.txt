@@ -11,6 +11,12 @@ endif()
 
 project(CarnageHeartRecomp LANGUAGES C CXX)
 
+# Android (arm64 APK, built by scripts/android/build_apk.py): turns off the
+# desktop-only surfaces and makes the game a libmain.so for SDLActivity.
+if(ANDROID)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ch_android.cmake")
+endif()
+
 # --- Opt-in product surfaces (OFF by default in the framework) -------------
 # Scaffold prompts / flags fill these. Without recomp-ui, PSX_RECOMP_UI is OFF.
 # The wizard (WIZARD_CMAKE_BLOCK / ENABLE_SETUP_WIZARD) is the first-run disc
@@ -66,6 +72,13 @@ psxrecomp_add_game_runtime(psx-runtime
         "${CMAKE_CURRENT_SOURCE_DIR}/codegen_setup.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/disc_autodetect.c"
 )
+
+if(CH_ANDROID)
+    get_property(_ch_android_targets GLOBAL PROPERTY CH_ANDROID_GAME_TARGETS)
+    foreach(_t IN LISTS _ch_android_targets)
+        ch_android_finish_target(${_t})
+    endforeach()
+endif()
 
 # Stage runtime configs next to the exe for direct build/ launches. Only copy
 # files that exist — never fail POST_BUILD when game_options.toml is absent.

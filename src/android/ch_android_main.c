@@ -95,6 +95,11 @@ int SDL_main(int argc, char *argv[])
      * runs at ~75% speed on the Y700 Gen 2). Shared with "SHARE LAST LOG". */
     setenv("PSX_RUNTIME_PERF_DIAG", "1", 0);
     setenv("PSX_RUNTIME_PERF_DIAG_MS", "2000", 0);
+    /* The software renderer draws on the CPU; the player setting's default
+     * Internal resolution (4x, meant for the PC's OpenGL renderer) made it
+     * rasterise 16x the pixels and held the Y700 Gen 2 at ~45 fps with audio
+     * underruns (test 3 log). Native 1x until the GLES renderer exists. */
+    setenv("PSX_INTERNAL_RESOLUTION", "native", 0);
     /* fps, emulation busy % and render busy % every 2 s. */
     setenv("PSX_FRAME_REPORT_MS", "2000", 0);
     /* Back button / gesture: a key the game sees (Circle, in pointer_menu.c)

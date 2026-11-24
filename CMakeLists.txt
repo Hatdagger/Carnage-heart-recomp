@@ -67,6 +67,18 @@ psxrecomp_add_game_runtime(psx-runtime
         "${CMAKE_CURRENT_SOURCE_DIR}/src/disc_autodetect.c"
 )
 
+# Online campaign (chat B's turn files, src/remote_battle.c and friends) is
+# built into players' games by default, so the launcher's ONLINE CAMPAIGN
+# page works in every release. The hooks do nothing until the launcher
+# starts the game with the turn switches (CH_TURN_*), so a normal campaign
+# plays exactly as before. Set here, before anything reads it (the launcher
+# menu does at ch_add_launcher_menu below); the option() further down then
+# keeps this value. -DCH_REMOTE_BATTLE=OFF still turns it off. Not on
+# Android yet: the APK has no launcher to start online games from.
+if(NOT DEFINED CACHE{CH_REMOTE_BATTLE} AND NOT ANDROID)
+    set(CH_REMOTE_BATTLE ON CACHE BOOL "Remote-player battle support (online campaign)")
+endif()
+
 # Stage runtime configs next to the exe for direct build/ launches. Only copy
 # files that exist — never fail POST_BUILD when game_options.toml is absent.
 foreach(_PSX_RUNTIME_CONFIG game.toml game_options.toml)
@@ -88,6 +100,12 @@ if(PSX_RECOMP_UI)
     if(TARGET psx-runtime-pgxp)
         ch_add_launcher_menu(psx-runtime-pgxp)
     endif()
+    # Setup wizard writes setup-log.txt in the game folder (cmake/ch_setup_log.cmake).
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ch_setup_log.cmake")
+    ch_add_setup_log(psx-runtime)
+    if(TARGET psx-runtime-pgxp)
+        ch_add_setup_log(psx-runtime-pgxp)
+    endif()
 endif()
 
 # PlayStation Mouse support restored from Carnage Heart EZ (src/mouse_pad_hle.c),
@@ -107,7 +125,7 @@ psxrecomp_select_guest_implementation(
     NAME ch_mouse IMPLEMENTATION ${CH_MOUSE_IMPL}
     TARGETS ${_ch_mouse_targets}
     GENERATED_SOURCES ${_ch_game_shards}
-    SYMBOLS func_8003E154 func_8003E89C func_8003EEC4 func_8001FB04
+    SYMBOLS func_8003E154 func_8003E89C func_8003EEC4 func_8001FB04 func_8003E4C8
     HLE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/mouse_pad_hle.c"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/pointer_menu.c"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/screen_labels.c"

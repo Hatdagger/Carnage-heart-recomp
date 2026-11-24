@@ -12,6 +12,15 @@ typedef struct ChPointerFrame {
     uint32_t buttons;   /* game button bits to OR into the pad word */
 } ChPointerFrame;
 
+/* Once per game PadRead, before ch_pointer_frame: 1 when the screen on show
+ * is a list with one-row up/down arrow boxes (found by the hotspot routine's
+ * wrapper in mouse_pad_hle.c), so the wheel can press them. */
+void ch_pointer_set_list(int on);
+/* For the hotspot routine's wrapper: -1 when this frame's press is a wheel
+ * notch up (report the list's up arrow as the box under the cursor), +1 for
+ * down, 0 for none. */
+int  ch_pointer_list_step(void);
+
 /* 1 when pointer mode may run this frame (not in netplay, not while the
  * PS1 Mouse has the pointer captured, not turned off with CH_POINTER=0). */
 int  ch_pointer_enabled(void);

@@ -12,9 +12,12 @@
  * Applying: the zip is unpacked into <kit>/Update/stage, and each file is moved
  * over the old one (the old one is renamed first, so a running file can be
  * replaced on Windows and every move can be undone if one fails). The player's
- * files are skipped (protected_path). Last, <kit>/generated is removed: the
- * setup exe then sees the game code is missing, regenerates it from the disc
- * and rebuilds build-release/ on its next start.
+ * files are skipped (protected_path). Last, when a file the game C is made
+ * from changed (needs_regenerate), <kit>/generated is removed: the setup exe
+ * then sees the game code is missing, regenerates it from the disc and
+ * rebuilds build-release/ on its next start. When only compiled files changed,
+ * generated/ stays and launcher/ch_quick_rebuild.py rebuilds without
+ * regenerating (start_quick_rebuild).
  */
 #include "ch_update.h"
 
@@ -75,6 +78,7 @@ std::mutex g_mu;
 Snapshot   g_snap;
 Asset      g_asset, g_sums;       /* what the last check chose */
 std::atomic<bool> g_busy{false};
+bool       g_quick = false;       /* the installed update keeps generated/ (see needs_regenerate) */
 
 void set(State s, const std::string& msg) {
     std::lock_guard<std::mutex> l(g_mu);
@@ -397,7 +401,9 @@ bool ends_with_ci(const std::string& s, const char* suffix) {
 bool protected_path(const std::string& rel) {
     /* The built game, its saves and settings; regenerated code; scratch. */
     for (const char* d : { "build-release/", "generated/", "disc/", "saves/", "cache/",
-                           "netplay/", "Update/", ".git/" })
+                           "netplay/", "Update/", ".git/",
+                           /* online games (keys + turn files), Android build output */
+                           "online-turns/", "build-android/", "build-android-work/" })
         if (starts_with(rel, d)) return true;
     /* Mods the release ships are replaced and added; the player's are not. */
     if (starts_with(rel, "mods/")) {
@@ -438,7 +444,129 @@ bool unpack(const fs::path& zip, const fs::path& stage) {
 #endif
 }
 
-bool apply_kit(const fs::path& zip, const fs::path& root, std::string& err) {
+/* ---- quick rebuild (launcher/ch_quick_rebuild.py) ------------------------------ */
+
+const char* const kQuickScript = "launcher/ch_quick_rebuild.py";
+
+struct QuickTools { fs::path python, tc_bin; };
+
+#ifdef _WIN32
+/* The wizard's rebuild console (build-release/recomp_deferred_rebuild.cmd,
+ * written by the setup exe at install) names the compiler pack's Python and
+ * tool folder: set "PYTHON=..." and set "TC_BIN=..." ('%' written as '%%'). */
+bool quick_tools(const fs::path& root, QuickTools* t) {
+    std::ifstream f(root / "build-release" / "recomp_deferred_rebuild.cmd", std::ios::binary);
+    std::string line;
+    while (std::getline(f, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        for (const char* key : { "set \"PYTHON=", "set \"TC_BIN=" }) {
+            if (line.compare(0, std::strlen(key), key) != 0 || line.size() < std::strlen(key) + 1 ||
+                line.back() != '"')
+                continue;
+            std::string v = line.substr(std::strlen(key), line.size() - std::strlen(key) - 1);
+            std::string out;
+            for (size_t i = 0; i < v.size(); ++i) {
+                out += v[i];
+                if (v[i] == '%' && i + 1 < v.size() && v[i + 1] == '%') ++i;
+            }
+            (key[5] == 'P' ? t->python : t->tc_bin) = fs::u8path(out);
+        }
+    }
+    std::error_code ec;
+    return !t->python.empty() && fs::is_regular_file(t->python, ec);
+}
+#else
+bool quick_tools(const fs::path&, QuickTools* t) {
+    t->python = "python3";
+    return true;
+}
+#endif
+
+bool quick_rebuild_possible(const fs::path& root) {
+    std::error_code ec;
+    QuickTools t;
+    return fs::is_directory(root / "build-release", ec) &&
+           fs::is_regular_file(root / fs::u8path(kQuickScript), ec) &&
+           quick_tools(root, &t);
+}
+
+/* Opens the quick rebuild in its own console window and returns at once; it
+ * waits for this program to close before it builds. */
+bool start_quick_rebuild(const fs::path& root) {
+    QuickTools t;
+    if (!quick_tools(root, &t)) return false;
+    const fs::path script = root / fs::u8path(kQuickScript);
+#ifdef _WIN32
+    const std::wstring pid = std::to_wstring(GetCurrentProcessId());
+    std::wstring cmd = L"\"" + t.python.wstring() + L"\" \"" + script.wstring() + L"\" \"" +
+                       root.wstring() + L"\" " + pid + L" \"" + t.tc_bin.wstring() + L"\"";
+    std::vector<wchar_t> buf(cmd.begin(), cmd.end()); buf.push_back(0);
+    STARTUPINFOW si; PROCESS_INFORMATION pi;
+    std::memset(&si, 0, sizeof si); si.cb = sizeof si;
+    std::memset(&pi, 0, sizeof pi);
+    const std::wstring cwd = root.wstring();
+    if (!CreateProcessW(t.python.c_str(), buf.data(), nullptr, nullptr, FALSE,
+                        CREATE_NEW_CONSOLE, nullptr, cwd.c_str(), &si, &pi))
+        return false;
+    CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
+    return true;
+#else
+    const std::string pid = std::to_string((long)getpid());
+    const std::string run = "python3 \"$0\" \"$1\" \"$2\"";
+    struct Term { const char* exe; const char* flag; };
+    static const Term terms[] = {
+        { "x-terminal-emulator", "-e" }, { "gnome-terminal", "--" },
+        { "konsole", "-e" }, { "xfce4-terminal", "-x" }, { "xterm", "-e" },
+    };
+    for (const Term& term : terms) {
+        std::vector<std::string> args = { term.exe, term.flag, "bash", "-c", run,
+                                          script.string(), root.string(), pid };
+        std::vector<char*> argv;
+        for (std::string& a : args) argv.push_back(a.data());
+        argv.push_back(nullptr);
+        pid_t child = 0;
+        if (posix_spawnp(&child, term.exe, nullptr, nullptr, argv.data(), environ) == 0)
+            return true;
+    }
+    /* No terminal: run it without a window (its output still goes to
+     * setup-log.txt; on failure it goes on to the full rebuild by itself). */
+    std::vector<std::string> args = { "python3", script.string(), root.string(), pid };
+    std::vector<char*> argv;
+    for (std::string& a : args) argv.push_back(a.data());
+    argv.push_back(nullptr);
+    pid_t child = 0;
+    return posix_spawnp(&child, "python3", nullptr, nullptr, argv.data(), environ) == 0;
+#endif
+}
+
+/* Does this kit file feed the game C made from the disc? Only those need the
+ * game regenerated; everything else (the launcher, the hooks in src/, the build
+ * files, the runtime UI, docs, mods) is compiled, so a rebuild picks it up.
+ * Anything not listed as compile-only counts as a generator input, so a file
+ * nobody thought of errs on the side of the full rebuild. */
+bool compile_only(const std::string& rel) {
+    for (const char* d : { "launcher/", "cmake/", "src/", "assets/", "mods/", "docs/",
+                           "recomp-ui/", "scripts/", "android/" })
+        if (starts_with(rel, d)) return true;
+    for (const char* f : { "CMakeLists.txt", "README.md", "README-SETUP.txt", "VERSION",
+                           "psx_game_version.txt", kSetupExe,
+                           "Build Android App.bat", "build-android-app.sh" })
+        if (rel == f) return true;
+    /* Libraries beside the setup exe. */
+    if (rel.find('/') == std::string::npos &&
+        (ends_with_ci(rel, ".dll") || ends_with_ci(rel, ".so")))
+        return true;
+    return false;
+}
+
+bool needs_regenerate(const std::vector<std::string>& changed) {
+    for (const std::string& rel : changed)
+        if (!compile_only(rel)) return true;
+    return false;
+}
+
+bool apply_kit(const fs::path& zip, const fs::path& root, std::string& err, bool* quick) {
+    *quick = false;
     std::error_code ec;
     sweep_old(root);
     const fs::path stage = root / "Update" / "stage";
@@ -454,6 +582,7 @@ bool apply_kit(const fs::path& zip, const fs::path& root, std::string& err) {
     }
     struct Move { fs::path dest, old; bool had_old; };
     std::vector<Move> done;
+    std::vector<std::string> changed;
     bool ok = true;
     for (fs::recursive_directory_iterator it(stage, ec), end; !ec && it != end; it.increment(ec)) {
         if (!it->is_regular_file(ec)) continue;
@@ -477,6 +606,7 @@ bool apply_kit(const fs::path& zip, const fs::path& root, std::string& err) {
             break;
         }
         done.push_back(mv);
+        changed.push_back(rel);
     }
     if (!ok) {   /* put every file back as it was */
         for (auto i = done.rbegin(); i != done.rend(); ++i) {
@@ -488,15 +618,29 @@ bool apply_kit(const fs::path& zip, const fs::path& root, std::string& err) {
         return false;
     }
     /* The old copies are only needed to undo a failed install. One that is
-     * still in use stays and is swept by the next update. */
-    for (const Move& mv : done)
-        if (mv.had_old) { std::error_code r; fs::remove(mv.old, r); }
+     * still in use stays and is swept by the next update. The new files get
+     * the current time: they keep the zip's times when unpacked, which can be
+     * older than the player's last build, and the build would then think they
+     * are already compiled. */
+    const auto now = fs::file_time_type::clock::now();
+    for (const Move& mv : done) {
+        std::error_code r;
+        if (mv.had_old) fs::remove(mv.old, r);
+        fs::last_write_time(mv.dest, now, r);
+    }
 #ifndef _WIN32
     chmod((root / kSetupExe).c_str(), 0755);
 #endif
     fs::remove_all(root / "Update", ec);
-    /* The setup exe rebuilds when the game code is missing. */
-    fs::remove_all(root / "generated", ec);
+    /* Game C made from the disc is still right when no generator input
+     * changed: keep it and rebuild only (restart_into_rebuild). Otherwise
+     * remove it; the setup exe regenerates it when it is missing. */
+    if (!needs_regenerate(changed) && fs::is_directory(root / "generated", ec) &&
+        quick_rebuild_possible(root)) {
+        *quick = true;
+    } else {
+        fs::remove_all(root / "generated", ec);
+    }
     return true;
 }
 
@@ -591,10 +735,16 @@ void do_apply() {
     set(State::Applying, "INSTALLING");
     std::string err;
     /* apply_kit unpacks into Update/stage beside the zip, then clears Update/. */
-    const bool ok = apply_kit(file, root, err);
+    bool quick = false;
+    const bool ok = apply_kit(file, root, err, &quick);
     fs::remove_all(dir, ec);
-    if (ok) set(State::Done, "VERSION " + latest + " IS INSTALLED. RESTART TO REBUILD THE GAME WITH IT");
-    else    set(State::Failed, err);
+    { std::lock_guard<std::mutex> l(g_mu); g_quick = ok && quick; }
+    if (ok && quick)
+        set(State::Done, "VERSION " + latest + " IS INSTALLED. RESTART FOR A QUICK REBUILD");
+    else if (ok)
+        set(State::Done, "VERSION " + latest + " IS INSTALLED. RESTART TO REBUILD THE GAME WITH IT");
+    else
+        set(State::Failed, err);
 }
 
 void start(void (*job)()) {
@@ -655,8 +805,15 @@ bool restart_into_rebuild() {
     }
     const fs::path root = kit_root();
     if (root.empty()) return false;
-    const fs::path exe = root / kSetupExe;
     std::error_code ec;
+    bool quick;
+    { std::lock_guard<std::mutex> l(g_mu); quick = g_quick; }
+    if (quick) {
+        if (start_quick_rebuild(root)) return true;
+        /* Could not open it: fall back to the full rebuild. */
+        fs::remove_all(root / "generated", ec);
+    }
+    const fs::path exe = root / kSetupExe;
     if (!fs::is_regular_file(exe, ec)) return false;
 #ifdef _WIN32
     std::wstring cmd = L"\"" + exe.wstring() + L"\"";
@@ -675,6 +832,71 @@ bool restart_into_rebuild() {
     char* argv[] = { path.data(), nullptr };
     pid_t pid = 0;
     return posix_spawn(&pid, path.c_str(), nullptr, nullptr, argv, environ) == 0;
+#endif
+}
+
+/* ---- Build Android App ----------------------------------------------------- */
+
+#ifdef _WIN32
+const char* const kAndroidLauncher = "Build Android App.bat";
+#else
+const char* const kAndroidLauncher = "build-android-app.sh";
+#endif
+
+bool android_builder_available() {
+    const fs::path root = kit_root();
+    std::error_code ec;
+    return !root.empty() &&
+           fs::is_regular_file(root / "scripts" / "android" / "build_android_app.py", ec) &&
+           fs::is_regular_file(root / kAndroidLauncher, ec);
+}
+
+bool start_android_build(std::string* why) {
+    const fs::path root = kit_root();
+    std::error_code ec;
+    const fs::path script = root / kAndroidLauncher;
+    if (root.empty() || !fs::is_regular_file(script, ec)) {
+        if (why) *why = "THE ANDROID BUILDER IS NOT IN THIS VERSION";
+        return false;
+    }
+#ifdef _WIN32
+    /* A console of its own, so the player sees the progress and the .bat's
+     * closing "press any key". cmd /c ""path"" keeps spaces in the path. */
+    std::wstring cmd = L"cmd.exe /c \"\"" + script.wstring() + L"\"\"";
+    std::vector<wchar_t> buf(cmd.begin(), cmd.end()); buf.push_back(0);
+    STARTUPINFOW si; PROCESS_INFORMATION pi;
+    std::memset(&si, 0, sizeof si); si.cb = sizeof si;
+    std::memset(&pi, 0, sizeof pi);
+    const std::wstring cwd = root.wstring();
+    if (!CreateProcessW(nullptr, buf.data(), nullptr, nullptr, FALSE,
+                        CREATE_NEW_CONSOLE, nullptr, cwd.c_str(), &si, &pi)) {
+        if (why) *why = "COULD NOT OPEN THE BUILD WINDOW";
+        return false;
+    }
+    CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
+    return true;
+#else
+    /* Linux: the first terminal program found; it waits for Enter at the end
+     * so the messages stay readable. */
+    const std::string sh = script.string();
+    const std::string run =
+        "cd \"$(dirname \"$0\")\" && bash \"$0\"; echo; read -r -p 'Press Enter to close. ' _";
+    struct Term { const char* exe; const char* flag; };
+    static const Term terms[] = {
+        { "x-terminal-emulator", "-e" }, { "gnome-terminal", "--" },
+        { "konsole", "-e" }, { "xfce4-terminal", "-x" }, { "xterm", "-e" },
+    };
+    for (const Term& t : terms) {
+        std::vector<std::string> args = { t.exe, t.flag, "bash", "-c", run, sh };
+        std::vector<char*> argv;
+        for (std::string& a : args) argv.push_back(a.data());
+        argv.push_back(nullptr);
+        pid_t pid = 0;
+        if (posix_spawnp(&pid, t.exe, nullptr, nullptr, argv.data(), environ) == 0)
+            return true;
+    }
+    if (why) *why = "NO TERMINAL FOUND: RUN build-android-app.sh";
+    return false;
 #endif
 }
 

@@ -34,4 +34,13 @@ vendored SDL3/zlib/libwebp archives (the setup kit ships them;
   file picker; `GameActivity` (SDLActivity) runs the game with the software
   renderer. SDL's own Java glue is taken from the vendored SDL3 tarball at
   build time so it always matches the C library.
+- Online campaign (`-DCH_REMOTE_BATTLE=ON`, on by default here):
+  `OnlineActivity` is the Online screen (games, NEW GAME, JOIN A GAME, PLAY,
+  SHARE CODE, FORGET); `GameActivity` sets the `CH_TURN_*` switches with
+  `Os.setenv` before the game starts; `Relay.java` talks to the relay and also
+  makes the game's own relay requests (Android has no curl;
+  `src/android/ch_android_relay.c` calls it through JNI); `TurnCheckJob`
+  checks about every 15 minutes and posts "it's your turn". Games and turn
+  files live in `files/online-turns/` as on the desktop. PC test of the relay
+  code: `tools/research/android_relay_test/run.sh`.
 - Minimum Android 10 (API 29), target API 35, 16 KB page aligned.

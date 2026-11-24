@@ -34,7 +34,7 @@ This repository contains **no game data and no recompiled game code**. You gener
 | Left click / tap | Cross (confirm) on the item under the pointer |
 | Right click / long press | Opens a small menu at the pointer with the buttons a mouse lacks. On menu screens it lists only the buttons that do something there and says what they do (for example "SELECT: QUIT GAME", "L2: NEXT BASE", "R2: CHIP LIST" on the chip program grid, "L2: NEXT OKE" in battle); **MORE BUTTONS** shows the full list (Triangle, Square, Start, Select, L1, R1, L2, R2). Pick one to press it on the item you right-clicked; click anywhere else to close |
 | Double right click / two-finger tap | Circle (back) |
-| Mouse wheel | On the chip program grid: scrolls the grid up and down (half a row per notch). Shift + wheel, a sideways wheel or a sideways touchpad swipe scrolls left and right |
+| Mouse wheel | On the chip program grid: scrolls the grid up and down (half a row per notch). Shift + wheel, a sideways wheel or a sideways touchpad swipe scrolls left and right. On lists with arrow buttons (Select Card, Production, Form Unit): one row per notch, wherever the pointer is |
 
 <p align="center">
   <img src="docs/screenshots/right-click-menu-base.png" alt="Right-click menu on the base screen, listing Select: Quit Game and L2: Next Base" width="400">
@@ -57,6 +57,9 @@ While you use the mouse, the game also switches on the mouse layout that *Carnag
 </p>
 <p align="center">
   <img src="docs/screenshots/chip-grid-wheel-scroll.png" alt="Chip program grid before and after four mouse-wheel notches down" width="640">
+</p>
+<p align="center">
+  <img src="docs/screenshots/card-list-wheel-scroll.png" alt="Select Card list after four mouse-wheel notches down: CARD-5 at the top" width="400">
 </p>
 
 Pointer mode is off during netplay. Set `CH_POINTER=0` to turn it off.

@@ -56,6 +56,8 @@ static int pointer_mode;
  * battle_seen: PadRead count when the battle viewer (0x8001FB04) last ran. */
 static uint32_t pad_reads, screen_ra, screen_seen, battle_seen = 0xFFFFFF00u;
 static void note_screen(uint32_t ra) { screen_ra = ra; screen_seen = pad_reads; }
+/* The last screen whose hotspot table has one-row up/down arrow boxes. */
+static uint32_t list_ra, list_seen = 0xFFFFFF00u;
 
 #define BATTLE_MODE   0x800DF3D0u /* 0 = test battle (Start: status list) */
 #define BATTLE_PADS   0x800DF3D8u /* 2 = two players: L2 / Start don't switch OKE */
@@ -72,6 +74,8 @@ void func_8003E154(CPUState *cpu)
     /* A screen that called the hotspot routines within the last few frames is
      * still the one on show (a menu opened during a battle wins); else the
      * battle viewer if it ran; else not a known screen. */
+    ch_pointer_set_list(pad_reads - screen_seen <= 4u && list_ra == screen_ra &&
+                        pad_reads - list_seen <= 1u);
     if (pad_reads - screen_seen <= 4u) {
         ch_pointer_set_screen(screen_ra);
     } else if (pad_reads - battle_seen <= 4u) {
@@ -240,10 +244,51 @@ void func_8003E89C(CPUState *cpu)
  * every hotspot screen calls this each frame. */
 void ch_mouse_lle_func_8003EEC4(CPUState *cpu);
 
+/* A list's one-row scroll arrows in a hotspot table (entries of 0x12 bytes:
+ * id, x, y, w, h as u16, then 8 bytes; id 0 ends it). The game's lists use
+ * ids 0xF1x for the one-row arrows (the top one moves up, the bottom one
+ * down) and 0xF2x for the page arrows. Seen on the card list (table
+ * 0x800C4270), production's card list (0x800BF418), Form Unit's OKE list
+ * (0x800C4480) and 0x800BBC74. */
+static void find_list_arrows(CPUState *cpu, uint32_t table, uint16_t *up, uint16_t *down)
+{
+    *up = *down = 0;
+    if ((table & 0xFFE00000u) != 0x80000000u) return;
+    int top = 0x10000, bottom = -1;
+    for (int i = 0; i < 32; ++i) {
+        const uint32_t e = table + 0x12u * (uint32_t)i;
+        const uint16_t id = cpu->read_half(e);
+        if (id == 0) break;
+        const int y = cpu->read_half(e + 4), h = cpu->read_half(e + 8);
+        if (id < 0xF10 || id > 0xF1F || h > 20) continue;
+        if (y < top) { top = y; *up = id; }
+        if (y > bottom) { bottom = y; *down = id; }
+    }
+    if (*up == *down) *up = *down = 0;
+}
+
 void func_8003EEC4(CPUState *cpu)
 {
-    if (cpu->pc == 0u || cpu->pc == 0x8003EEC4u) note_screen(cpu->gpr[31]);
+    const int fresh = cpu->pc == 0u || cpu->pc == 0x8003EEC4u;
+    const uint32_t ra = cpu->gpr[31];
+    uint16_t up = 0, down = 0;
+    if (fresh) {
+        note_screen(ra);
+        find_list_arrows(cpu, cpu->gpr[6], &up, &down);
+        if (up) { list_ra = ra; list_seen = pad_reads; }
+    }
     ch_mouse_lle_func_8003EEC4(cpu);
+    /* Mouse wheel on a list (pointer_menu.c): this frame's Cross is a wheel
+     * notch, so report the one-row arrow as the box under the cursor. */
+    if (up && cpu->pc == ra) {
+        const int step = ch_pointer_list_step();
+        if (step) {
+            cpu->gpr[2] = step < 0 ? up : down;
+#ifdef CH_MOUSE_SELFTEST
+            fprintf(stderr, "chptr list ra=%08X id=%X\n", (unsigned)ra, (unsigned)cpu->gpr[2]);
+#endif
+        }
+    }
 }
 
 /* Battle viewer input (USA 0x8001FB04, called every frame for each OKE while

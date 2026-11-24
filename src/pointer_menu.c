@@ -20,7 +20,12 @@
  *                         closes again on the second, so there is no delay.
  *   Mouse wheel           on the chip program grid: scroll the grid (R1 held
  *                         with the D-pad, as on the pad); Shift + wheel or a
- *                         sideways wheel / touchpad swipe scrolls left-right
+ *                         sideways wheel / touchpad swipe scrolls left-right.
+ *                         On list screens with up/down arrow boxes (card
+ *                         list and others, see mouse_pad_hle.c): one notch
+ *                         presses the one-row arrow (the hotspot routine
+ *                         reports that box for the press, so the pointer
+ *                         does not move)
  *   Touch tap             move + Cross
  *   Touch drag            move only
  *   Touch long press      the same menu
@@ -70,6 +75,12 @@
 #define WHEEL_FRAMES_Y  10              /* one wheel notch = half a row */
 #define WHEEL_FRAMES_X  7               /* one notch = half a column */
 #define WHEEL_MAX       60
+/* List screens: one notch = Cross held LIST_PRESS frames on the one-row
+ * arrow box, then LIST_GAP frames before the next notch (a one-row scroll
+ * takes the card list 8 frames; a press during it is ignored by the game). */
+#define LIST_PRESS      2
+#define LIST_GAP        10
+#define LIST_MAX_NOTCHES 6
 
 /* kind: a button, or MORE (show every button), or BACK (Circle). */
 enum { K_BUTTON, K_MORE, K_BACK };
@@ -158,6 +169,10 @@ static MenuItem   s_items[MAX_ITEMS];   /* entries of the open menu */
 static int        s_n_items, s_mw = MAX_W, s_mh = MAX_H; /* menu size, menu px */
 static float      s_wheel_ax, s_wheel_ay; /* wheel movement not yet a notch */
 static int        s_wheel_x, s_wheel_y; /* scroll frames to play, signed */
+static int        s_wheel_n;            /* whole vertical notches, + = up */
+static int        s_list_on;            /* a list with arrow boxes is on show */
+static int        s_list_dir, s_list_step; /* -1 up / +1 down; step = this frame's */
+static int        s_list_hold, s_list_gap;
 
 /* Touch */
 static SDL_FingerID s_f1; static int s_fingers, s_f1_down, s_f_drag, s_f_two, s_f_consumed;
@@ -298,8 +313,10 @@ static bool SDLCALL watch(void *ud, SDL_Event *ev) {
         s_win = ev->wheel.windowID;
         s_wheel_ax += dx; s_wheel_ay += dy;
         /* Whole notches only; touchpads send fractions that add up. */
-        while (s_wheel_ay >= 1.0f)  { s_wheel_ay -= 1.0f; s_wheel_y += WHEEL_FRAMES_Y; }
-        while (s_wheel_ay <= -1.0f) { s_wheel_ay += 1.0f; s_wheel_y -= WHEEL_FRAMES_Y; }
+        while (s_wheel_ay >= 1.0f)  { s_wheel_ay -= 1.0f; s_wheel_y += WHEEL_FRAMES_Y; ++s_wheel_n; }
+        while (s_wheel_ay <= -1.0f) { s_wheel_ay += 1.0f; s_wheel_y -= WHEEL_FRAMES_Y; --s_wheel_n; }
+        if (s_wheel_n > LIST_MAX_NOTCHES) s_wheel_n = LIST_MAX_NOTCHES;
+        else if (s_wheel_n < -LIST_MAX_NOTCHES) s_wheel_n = -LIST_MAX_NOTCHES;
         while (s_wheel_ax >= 1.0f)  { s_wheel_ax -= 1.0f; s_wheel_x += WHEEL_FRAMES_X; }
         while (s_wheel_ax <= -1.0f) { s_wheel_ax += 1.0f; s_wheel_x -= WHEEL_FRAMES_X; }
         if (s_wheel_y > WHEEL_MAX) s_wheel_y = WHEEL_MAX; else if (s_wheel_y < -WHEEL_MAX) s_wheel_y = -WHEEL_MAX;
@@ -559,6 +576,15 @@ void ch_pointer_set_screen(uint32_t ra) {
     lock(); s_screen_ra = ra; unlock();
 }
 
+void ch_pointer_set_list(int on) {
+    lock(); s_list_on = on; unlock();
+}
+
+int ch_pointer_list_step(void) {
+    lock(); const int st = s_list_step; unlock();
+    return st;
+}
+
 int ch_pointer_enabled(void) {
     static int off = -1;
     if (off < 0) { const char *e = getenv("CH_POINTER"); off = (e && *e == '0') ? 1 : 0; }
@@ -603,7 +629,9 @@ void ch_pointer_frame(ChPointerFrame *out) {
     if (s_left_held || s_left_latch) out->buttons |= B_CROSS;
     s_left_latch = 0;
     if (s_fire_frames > 0) { out->buttons |= s_fire_bits; if (--s_fire_frames == 0) s_fire_bits = 0; }
-    /* Mouse wheel: scroll the chip grid; anywhere else it is dropped. */
+    /* Mouse wheel: scroll the chip grid, or press a list's one-row arrow;
+     * anywhere else it is dropped. */
+    s_list_step = 0;
     if (s_screen_ra >= CHIP_GRID_START && s_screen_ra < CHIP_GRID_END && !s_menu_open) {
         uint32_t dir = 0;
         if (s_wheel_y > 0)      { dir |= B_UP;    --s_wheel_y; }
@@ -611,8 +639,23 @@ void ch_pointer_frame(ChPointerFrame *out) {
         if (s_wheel_x > 0)      { dir |= B_RIGHT; --s_wheel_x; }
         else if (s_wheel_x < 0) { dir |= B_LEFT;  ++s_wheel_x; }
         if (dir) { out->buttons |= B_R1 | dir; s_activity = 1; }
+        s_wheel_n = 0;
+    } else if (s_list_on && !s_menu_open && !s_left_held) {
+        if (s_list_hold > 0) {
+            --s_list_hold; s_list_step = s_list_dir; out->buttons |= B_CROSS;
+        } else if (s_list_gap > 0) {
+            --s_list_gap;
+        } else if (s_wheel_n) {
+            s_list_dir = s_wheel_n > 0 ? -1 : 1;
+            s_wheel_n += s_wheel_n > 0 ? -1 : 1;
+            s_list_step = s_list_dir; out->buttons |= B_CROSS;
+            s_list_hold = LIST_PRESS - 1; s_list_gap = LIST_GAP;
+            s_activity = 1;
+        }
+        s_wheel_x = s_wheel_y = 0; s_wheel_ax = 0.0f;
     } else {
-        s_wheel_x = s_wheel_y = 0; s_wheel_ax = s_wheel_ay = 0.0f;
+        s_wheel_x = s_wheel_y = s_wheel_n = 0; s_wheel_ax = s_wheel_ay = 0.0f;
+        s_list_hold = s_list_gap = 0;
     }
     out->activity = s_activity || out->buttons;
     s_activity = 0;
@@ -622,5 +665,7 @@ void ch_pointer_frame(ChPointerFrame *out) {
 #else /* SDL2 builds: no pointer mode */
 int  ch_pointer_enabled(void) { return 0; }
 void ch_pointer_set_screen(uint32_t ra) { (void)ra; }
+void ch_pointer_set_list(int on) { (void)on; }
+int  ch_pointer_list_step(void) { return 0; }
 void ch_pointer_frame(ChPointerFrame *out) { memset(out, 0, sizeof *out); }
 #endif

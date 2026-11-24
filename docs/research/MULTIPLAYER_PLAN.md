@@ -191,7 +191,7 @@ Branch `online-android`, **PR #9** (on top of v0.1.3 main, which already has PR 
 - The turn simulator (`turnsim/run.sh`, online cases included) still passes with the changed `turn_relay.c`.
 - The APK builds (sandbox devkit) and contains the online code.
 
-**Not tested yet**: anything on a device: the JNI path from the game's relay thread, the screen itself, the notification. Needs the owner's tablet (and a second copy: the desktop game or a second Android device).
+**Tested on a device (2026-11-24, owner)**: the test APK (signed with the owner's key) on the Lenovo Legion Tab Y700 Gen 2 — the owner reports multiplayer worked. PR #9 merged into main.
 
 Known gaps
 - The notification icon is the app icon (Android shows it as a plain shape in the status bar).
@@ -212,7 +212,7 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 3. ~~Map the player order screens (including re-orders) and factory data~~ (done 2026-11-22).
 4. ~~Local hot-seat test on one machine: end turn, swap sides, play the other side~~ (done 2026-11-22, `src/hotseat.c`).
 5. ~~Turn files: capture orders and battle results on one copy, apply them on a second copy~~ (done 2026-11-22, `src/turn_files.c`; tested in the real game 2026-11-23).
-6. ~~Waiting without freezing the game~~ and ~~storage: the turn relay~~ (done 2026-11-23). ~~Launcher Online screen, closing after sending, catching up on start (also from the relay on a new device), desktop "your turn" check~~ (done 2026-11-24). ~~Scenario check~~ (done 2026-11-24). ~~Real relay test~~ (done 2026-11-24, session 4). ~~Android: Online screen and notifications~~ (built 2026-11-24, session 5, PR #9). Next: test on a device.
+6. ~~Waiting without freezing the game~~ and ~~storage: the turn relay~~ (done 2026-11-23). ~~Launcher Online screen, closing after sending, catching up on start (also from the relay on a new device), desktop "your turn" check~~ (done 2026-11-24). ~~Scenario check~~ (done 2026-11-24). ~~Real relay test~~ (done 2026-11-24, session 4). ~~Android: Online screen and notifications~~ (built 2026-11-24, session 5, PR #9). ~~Device test~~ (passed 2026-11-24, owner).
 7. Optional: visual replay of the enemy's turn from the orders in the file.
 8. Later: Options A and B (the card and save layout they need is now mapped).
 
@@ -221,14 +221,16 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 - Hub merged PR #2 and the Android port into main (v0.1.3). New branch `online-android` on top of it, **PR #9**: the online campaign in the Android app (step 6e above): Online screen, relay requests through Java (no curl on Android), `CH_TURN_*` switches from the app, "it's your turn" notifications every ~15 minutes, `INTERNET` permission (was missing).
 - `Relay.java` tested on a PC against the local and the real relay (`tools/research/android_relay_test/run.sh`, all pass); turn simulator still passes; APK built.
 
-**Next**
-- Owner: install the test APK on the Legion Tab and try ONLINE CAMPAIGN: NEW GAME, then join it from the PC launcher (or the other way round), play a turn each, and wait for the notification. Then SAVE LOG TO DOWNLOADS and attach the log.
-- Test APK rebuilt with the owner's key (`carnageheart.keystore`, SHA-256 19:6D:C3:EC...C9:98): installs over the old test app.
-- Hub: merge PR #9 after the device test.
-- Later: visual replay of the enemy's turn (step 7); Options A and B.
+- Test APK rebuilt with the owner's key (`carnageheart.keystore`, SHA-256 19:6D:C3:EC...C9:98); installs over the old test app.
+- **Owner tested on the tablet: multiplayer worked.** Hub merged PR #9 into main.
+
+**Next** (session 6 branches from main)
+- Optional: visual replay of the enemy's turn (step 7).
+- Later: Options A (live VS) and B (card sharing; Share Data can reuse the relay).
+- Small: a monochrome notification icon.
 
 **Blocked**
-- Device test needs the owner.
+- Nothing.
 
 ## Session status (chat B, 2026-11-24, session 4)
 **Done**

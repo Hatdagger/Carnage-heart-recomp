@@ -11,6 +11,17 @@ endif()
 
 project(CarnageHeartRecomp LANGUAGES C CXX)
 
+# Online campaign (chat B's turn files, src/remote_battle.c and friends) is
+# built into players' games by default, so the launcher's ONLINE CAMPAIGN
+# page works in every release. The hooks do nothing until the launcher
+# starts the game with the turn switches (CH_TURN_*), so a normal campaign
+# plays exactly as before. Set here, before anything reads it (the launcher
+# menu does at ch_add_launcher_menu below); the option() further down then
+# keeps this value. -DCH_REMOTE_BATTLE=OFF still turns it off.
+if(NOT DEFINED CACHE{CH_REMOTE_BATTLE})
+    set(CH_REMOTE_BATTLE ON CACHE BOOL "Remote-player battle support (online campaign)")
+endif()
+
 # --- Opt-in product surfaces (OFF by default in the framework) -------------
 # Scaffold prompts / flags fill these. Without recomp-ui, PSX_RECOMP_UI is OFF.
 # The wizard (WIZARD_CMAKE_BLOCK / ENABLE_SETUP_WIZARD) is the first-run disc

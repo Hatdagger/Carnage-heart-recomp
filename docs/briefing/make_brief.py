@@ -37,7 +37,7 @@ bullet = ParagraphStyle("bl", parent=body, leftIndent=12, bulletIndent=2, spaceA
 STATUS = {
     "DONE": GREEN, "WORKING": GREEN, "BUILT": GREEN,
     "IN PROGRESS": AMBER, "TESTING": AMBER, "PARTIAL": AMBER,
-    "PLANNED": GREY, "NOT STARTED": RED, "LATER": GREY,
+    "PLANNED": GREY, "NOT STARTED": RED, "LATER": GREY, "DROPPED": GREY,
 }
 
 def badge(s):
@@ -72,7 +72,7 @@ def progress_chart():
     items = [("Linux build", 100, GREEN), ("Windows setup kit", 85, AMBER),
              ("Mouse / pointer controls", 85, AMBER), ("Launcher", 70, AMBER),
              ("Campaign versus (multiplayer)", 60, AMBER), ("Card sharing", 20, GREY),
-             ("Android", 5, RED), ("Browser", 5, RED), ("Turn notifications", 0, RED)]
+             ("Android", 5, RED), ("Turn notifications", 0, RED)]
     W, rowh = 460, 16
     d = Drawing(W, rowh * len(items) + 24)
     x0, bw = 175, 240
@@ -161,7 +161,7 @@ S += bullets([
     "<b>Mouse controls work</b>: point-and-click plus a labelled right-click menu that tells you what each pad button does on the current screen.",
     "<b>A custom launcher</b> (Launch, Online play, Share Data, Update, Settings) is built; Update and Settings work.",
     "<b>Two-player campaign versus works on one PC (hot-seat)</b> and over turn files in a simulator. Next: a test with two real copies of the game.",
-    "<b>Not started yet:</b> Android, browser, turn notifications, card sharing uploads.",
+    "<b>Not started yet:</b> Android, turn notifications, card sharing uploads. <b>Browser version dropped.</b>",
 ])
 S.append(Spacer(1, 6))
 S.append(progress_chart())
@@ -171,7 +171,7 @@ S.append(PageBreak())
 S.append(P("1. Goals", h1))
 S.append(P("From the project's Goals document and the decisions made since:"))
 S += bullets([
-    "Get the game running on <b>Windows, Linux, Android</b> and possibly <b>browser</b>.",
+    "Get the game running on <b>Windows, Linux and Android</b>. (Browser dropped 23 Nov: players supply their own disc image anyway, so a browser version adds little.)",
     "Full <b>mouse and touch</b> support, including Carnage Heart EZ-style PS1 Mouse behaviour brought into the US version.",
     "A <b>launcher</b> that installs the game on the player's PC from their own disc (no game code in the repo), updates itself, and is fully usable with a controller or a 2-button mouse.",
     "<b>Multiplayer in two steps:</b> (1) card sharing for AI-vs-AI battles; (2) two players on a shared tactical map, taking turns moving units and preparing OKEs.",
@@ -185,9 +185,9 @@ S.append(status_table([
     ("Linux", "WORKING", "Native build boots on OpenBIOS (no retail BIOS), reaches the campaign map, battles and chip programming."),
     ("Windows", "TESTING", "Setup kit v0.1.1/v0.1.2 released; CI first-run check is green. Full install on your own PC still to confirm."),
     ("Android", "NOT STARTED", "Plan written: SDL3 + NDK, software renderer first. Big plus: no code overlays, so everything compiles ahead of time."),
-    ("Browser", "NOT STARTED", "Plan written: Emscripten + SDL3, software renderer, threads need special host headers."),
+    ("Browser", "DROPPED", "Dropped 23 Nov 2026: players supply their own disc image anyway, so a browser version adds little."),
     ("Mouse controls", "DONE", "Merged to main. Labelled right-click menu on menus, battles and chip grid."),
-    ("Touch controls", "PARTIAL", "Tap / long-press / two-finger tap coded; not tried on a real touch screen. Android/browser drawing path not done."),
+    ("Touch controls", "PARTIAL", "Tap / long-press / two-finger tap coded; not tried on a real touch screen. Android drawing path not done."),
     ("Launcher + installer", "IN PROGRESS", "Menu, installer, Update and Settings work; Online play and Share Data pages are placeholders (SOON)."),
     ("MP step 1: card sharing", "PLANNED", "Save and card layout fully mapped (one design = 1152 bytes). Upload / browse not built."),
     ("MP step 2: shared map", "IN PROGRESS", "Hot-seat tested in the real game; turn files tested in a simulator. Branch research/vs-battle-and-saves (PR #2)."),
@@ -199,7 +199,7 @@ S.append(PageBreak())
 S.append(P("2. What has been done", h1))
 S.append(P("2.1 Recompilation and the Linux build", h2))
 S += bullets([
-    "Disc analysed: 3 tracks (1 data + 2 audio), boot EXE SCUS_946.04. <b>The whole game is one 854 KB executable with no overlays</b>, so every function is compiled ahead of time — the key fact that makes Android and browser realistic.",
+    "Disc analysed: 3 tracks (1 data + 2 audio), boot EXE SCUS_946.04. <b>The whole game is one 854 KB executable with no overlays</b>, so every function is compiled ahead of time — the key fact that makes Android realistic.",
     "Generated <b>2,612 functions, about 6.9 million lines of C</b> in 201 shards.",
     "Linux x64 build boots on the free OpenBIOS, reaches the title screen, the campaign strategic map (3D hex map), battles and the chip-program grid.",
 ])
@@ -304,12 +304,11 @@ todo = [
     ("2", "Two-copy turn-file test", "Run tools/research/turns_demo.py: two real copies on one PC playing a campaign through a shared folder."),
     ("3", "Turn storage + waiting in the launcher", "Pick GitHub sign-in vs a small relay; move the wait out of End Turn."),
     ("4", "Android build", "SDL3 Android project + NDK, software renderer, disc picked through Android file access."),
-    ("5", "Touch + GLES drawing", "Port the right-click menu drawing to GLES so it shows on Android/browser; test touch."),
+    ("5", "Touch + GLES drawing", "Port the right-click menu drawing to GLES so it shows on Android; test touch."),
     ("6", "Notifications", "Desktop check on launcher open, then Android background check every ~15 min."),
     ("7", "Merge multiplayer branch", "Merge PR #2 into main once the real two-copy test passes."),
-    ("8", "Browser build", "Emscripten build with a file picker and IndexedDB saves."),
-    ("9", "Card sharing + enemy-turn replay", "Share Data page; replay of what the enemy did from the turn file."),
-    ("10", "Smaller items", "Clickable minimap, mouse-wheel chip-grid scrolling, research/negotiation mapping, wizard error log."),
+    ("8", "Card sharing + enemy-turn replay", "Share Data page; replay of what the enemy did from the turn file."),
+    ("9", "Smaller items", "Clickable minimap, mouse-wheel chip-grid scrolling, research/negotiation mapping, wizard error log."),
 ]
 data = [[P("<b>#</b>", cell), P("<b>Task</b>", cell), P("<b>What it means</b>", cell)]] + [[P(a, cellb), P(b, cellb), P(c, cell)] for a, b, c in todo]
 t = Table(data, colWidths=[0.35 * inch, 2.1 * inch, 4.55 * inch], repeatRows=1)

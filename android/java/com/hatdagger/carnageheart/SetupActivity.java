@@ -48,6 +48,7 @@ public class SetupActivity extends Activity {
     private Button playButton;
     private Button playSoftButton;
     private Button shareButton;
+    private Button saveLogButton;
     private boolean busy;
 
     @Override
@@ -148,7 +149,22 @@ public class SetupActivity extends Activity {
         root.addView(shareButton, sp);
         shareButton.setVisibility(View.GONE);
 
-        setContentView(root);
+        saveLogButton = new Button(this);
+        saveLogButton.setText("SAVE LOG TO DOWNLOADS");
+        saveLogButton.setTextSize(16);
+        saveLogButton.setOnClickListener(v -> saveLog());
+        LinearLayout.LayoutParams sl = wrap();
+        sl.topMargin = dp(12);
+        root.addView(saveLogButton, sl);
+        saveLogButton.setVisibility(View.GONE);
+
+        // Scrolls if the buttons don't fit (small or split screens).
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(BG);
+        scroll.addView(root, new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        setContentView(scroll);
     }
 
     private void setStatus(String text, boolean showProgress) {
@@ -329,29 +345,46 @@ public class SetupActivity extends Activity {
         return new File(getFilesDir(), "carnageheart.log");
     }
 
-    /** Disc is in place: offer PLAY, and SHARE LAST LOG when the previous run
-     *  left a log (starting the game overwrites it). */
+    /** Disc is in place: offer PLAY, and SHARE LAST LOG / SAVE LOG TO DOWNLOADS
+     *  when the previous run left a log (starting the game overwrites it). */
     private void showReady() {
         setStatus("Ready.", false);
         playButton.setVisibility(View.VISIBLE);
         playSoftButton.setVisibility(View.VISIBLE);
         File log = logFile();
-        shareButton.setVisibility(log.isFile() && log.length() > 0 ? View.VISIBLE : View.GONE);
+        int logVis = log.isFile() && log.length() > 0 ? View.VISIBLE : View.GONE;
+        shareButton.setVisibility(logVis);
+        saveLogButton.setVisibility(logVis);
     }
 
-    /** Sends the end of the last game log as text (mail, Drive, a chat app). */
-    private void shareLog() {
+    /** Start of the log (setup, renderer, GPU probe) + its end, as text small
+     *  enough for an Android share. Android silently drops a share whose
+     *  text is too big (test 6: a 200 KB tail did nothing). */
+    private String logExcerpt(int headBytes, int tailBytes) throws IOException {
         File log = logFile();
-        final int max = 200 * 1024;
-        String text;
         try (RandomAccessFile f = new RandomAccessFile(log, "r")) {
             long len = f.length();
-            long start = Math.max(0, len - max);
-            byte[] b = new byte[(int) (len - start)];
-            f.seek(start);
-            f.readFully(b);
-            text = (start > 0 ? "[... start of log cut ...]\n" : "")
-                + new String(b, java.nio.charset.StandardCharsets.UTF_8);
+            if (len <= headBytes + tailBytes) {
+                byte[] b = new byte[(int) len];
+                f.readFully(b);
+                return new String(b, java.nio.charset.StandardCharsets.UTF_8);
+            }
+            byte[] head = new byte[headBytes];
+            f.readFully(head);
+            byte[] tail = new byte[tailBytes];
+            f.seek(len - tailBytes);
+            f.readFully(tail);
+            return new String(head, java.nio.charset.StandardCharsets.UTF_8)
+                + "\n[... " + (len - headBytes - tailBytes) / 1024 + " KB of the middle cut ...]\n"
+                + new String(tail, java.nio.charset.StandardCharsets.UTF_8);
+        }
+    }
+
+    /** Sends the start and end of the last game log as text (a chat app, mail). */
+    private void shareLog() {
+        String text;
+        try {
+            text = logExcerpt(12 * 1024, 48 * 1024);
         } catch (IOException e) {
             setStatus("Could not read the log: " + e.getMessage(), false);
             return;
@@ -360,7 +393,44 @@ public class SetupActivity extends Activity {
         send.setType("text/plain");
         send.putExtra(Intent.EXTRA_SUBJECT, "Carnage Heart log");
         send.putExtra(Intent.EXTRA_TEXT, text);
-        startActivity(Intent.createChooser(send, "Share log"));
+        try {
+            startActivity(Intent.createChooser(send, "Share log"));
+        } catch (RuntimeException e) {
+            setStatus("Share failed (" + e.getClass().getSimpleName()
+                + "). Use SAVE LOG TO DOWNLOADS instead.", false);
+        }
+    }
+
+    /** Copies the whole last log to Downloads (no permission needed on
+     *  Android 10+), where any app can attach it as a file. */
+    private void saveLog() {
+        File log = logFile();
+        String name = "carnageheart-log-" + new java.text.SimpleDateFormat(
+            "yyyyMMdd-HHmmss", Locale.US).format(new java.util.Date()) + ".txt";
+        android.content.ContentValues v = new android.content.ContentValues();
+        v.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name);
+        v.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/plain");
+        v.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "Download/");
+        ContentResolver cr = getContentResolver();
+        Uri uri = null;
+        try {
+            uri = cr.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+            if (uri == null) throw new IOException("no Downloads entry");
+            try (InputStream in = new java.io.FileInputStream(log);
+                 OutputStream out = cr.openOutputStream(uri)) {
+                if (out == null) throw new IOException("cannot write");
+                byte[] buf = new byte[64 * 1024];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            }
+            setStatus("Saved to Downloads: " + name
+                + "\nAttach that file in the chat (paperclip / + button, then Files).", false);
+        } catch (IOException | RuntimeException e) {
+            if (uri != null) {
+                try { cr.delete(uri, null, null); } catch (RuntimeException ignored) { }
+            }
+            setStatus("Could not save the log: " + e.getMessage(), false);
+        }
     }
 
     private void startGame(String renderer) {

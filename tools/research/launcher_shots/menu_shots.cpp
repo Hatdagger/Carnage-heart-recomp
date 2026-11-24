@@ -208,6 +208,22 @@ int main(int argc, char** argv) {
         press(ImGuiKey_Enter);                  /* the game */
         press(ImGuiKey_DownArrow); press(ImGuiKey_DownArrow);
         frame({}, true, "11-forget");
+    } else if (mode == "A3") {
+        /* run.sh put a version-2 turn file 1 (Ganymede map 2) in the game's
+         * folder: the game page shows that scenario, and the launcher sends
+         * the file to the relay as one the game could not send. */
+        idle(800);
+        press(ImGuiKey_DownArrow); press(ImGuiKey_Enter); press(ImGuiKey_DownArrow); press(ImGuiKey_Enter);
+        idle(300);
+        frame({}, true, "12-list-scenario");
+        press(ImGuiKey_Enter);                  /* the game */
+        idle(300);
+        frame({}, true, "13-game-scenario");
+        const ch_online::Snapshot s = ch_online::snapshot();
+        if (!s.games.empty())
+            std::printf("scenario=%d map=%d label=%s status=%s\n", s.games[0].scenario, s.games[0].map,
+                        ch_online::scenario_label(s.games[0]).c_str(),
+                        ch_online::status_label(s.games[0].status));
     }
     return 0;
 }

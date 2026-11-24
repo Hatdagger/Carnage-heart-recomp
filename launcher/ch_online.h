@@ -41,6 +41,9 @@ struct Game {
     int         latest = 0;        /* newest turn file on the relay */
     int         local = 0;         /* newest turn file in the folder */
     std::string detail;            /* one line for the player */
+    int         scenario = -1;     /* from the turn files (byte 48): 0 Europa (Practice),
+                                      1 Europa, 2 Ganymede, 3 Callisto; -1 none yet */
+    int         map = -1;          /* map number within the scenario (byte 49), from 0 */
 };
 
 struct Snapshot {
@@ -68,5 +71,8 @@ bool prepare_launch(const std::string& code);
 int your_turn_count();
 
 const char* status_label(Status s);      /* short, for a row: "YOUR TURN" */
+/* The scenario to start for this game, for the player: "EUROPA (PRACTICE)",
+ * "GANYMEDE MAP 2"; before any turn file, the one new games use. */
+std::string scenario_label(const Game& g);
 
 } /* namespace ch_online */

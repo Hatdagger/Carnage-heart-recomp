@@ -27,7 +27,7 @@ static int         g_pos = 0;
 
 static const char* kHowTo =
     "Start the game from here with PLAY. Load your own save if you have one "
-    "(it brings your OKE designs), then start Europa (Practice). The map "
+    "(it brings your OKE designs), then start the scenario shown above. The map "
     "catches up with the other player's newest turn by itself. Give your "
     "orders and press End Turn: your turn is sent, and you can close the "
     "game once the bottom line says it is on the relay. When it is your "
@@ -131,7 +131,8 @@ static void draw_campaign_page(LauncherModel*, const Gfx& g, const Input& in) {
                                                        : "YOU ARE PLAYER B (YOU JOINED IT)");
         text(g, x, 136.0f, 11.0f, status_color(gm.status),
              gm.detail.empty() ? "NOT CHECKED YET" : gm.detail.c_str(), w);
-        text(g, x, 190.0f, 11.0f, kDim, "SELECT IT TO PLAY, CHECK AGAIN OR FORGET IT.", w);
+        text(g, x, 190.0f, 11.0f, kText, ("START " + ch_online::scenario_label(gm)).c_str(), w);
+        text(g, x, 212.0f, 11.0f, kDim, "SELECT IT TO PLAY, CHECK AGAIN OR FORGET IT.", w);
     } else if (cur == ngames) {
         text(g, x, 92.0f, 11.0f, kHi, "NEW GAME");
         text(g, x, 114.0f, 11.0f, kText,
@@ -200,15 +201,16 @@ static void draw_cgame_page(LauncherModel* m, const Gfx& g, const Input& in) {
     const float x = 324.0f, w = 278.0f;
     text(g, x, 90.0f, 10.0f, kDim, "GAME CODE (GIVE IT TO THE OTHER PLAYER)");
     text(g, x, 104.0f, 26.0f, kBright, gm->code.c_str());
-    text(g, x, 142.0f, 11.0f, status_color(gm->status),
+    text(g, x, 142.0f, 11.0f, kHi, ("SCENARIO: " + ch_online::scenario_label(*gm)).c_str(), w);
+    text(g, x, 162.0f, 11.0f, status_color(gm->status),
          gm->detail.empty() ? "NOT CHECKED YET" : gm->detail.c_str(), w);
     if (cur == 2)
-        text(g, x, 190.0f, 11.0f, kWarn,
+        text(g, x, 214.0f, 11.0f, kWarn,
              "Forgetting removes this game from the list. Your key goes with it, "
              "so you cannot play this game again from this computer. The turn "
              "files stay in the online-turns folder.", w);
     else
-        text(g, x, 190.0f, 11.0f, kText, kHowTo, w);
+        text(g, x, 214.0f, 11.0f, kText, kHowTo, w);
     if (s.busy) text(g, x, 374.0f, 11.0f, kDim, "TALKING TO THE RELAY...");
     else result_line(g, s, x, 374.0f, w);
     const bool back = footer(g, "A / ENTER / LEFT CLICK  SELECT      B / ESC / RIGHT CLICK  BACK", true);

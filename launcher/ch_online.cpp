@@ -257,6 +257,19 @@ int turn_flags(const std::string& code, int seq) {
     return (unsigned char)h[7];
 }
 
+/* Scenario and map from a turn file's header (version 2 and later keep them
+ * in bytes 48 and 49; see src/turn_files.c). False for older or unreadable
+ * files. */
+bool turn_scenario(const std::string& code, int seq, int* scen, int* map) {
+    std::ifstream f(turn_path(code, seq), std::ios::binary);
+    unsigned char h[52];
+    if (!f.read((char*)h, sizeof h) || std::memcmp(h, "CHTF", 4) != 0) return false;
+    if ((h[4] | (h[5] << 8)) < 2) return false;
+    *scen = h[48];
+    *map = h[49];
+    return true;
+}
+
 bool is_mine(char role, int seq) { return ((seq & 1) == 1) == (role == 'A'); }
 
 std::string upper_code(const std::string& s) {
@@ -306,6 +319,7 @@ void check_one(Game& g) {
         if (ec) break;
     }
     g.local = local_latest(g.code);
+    if (g.local > 0) turn_scenario(g.code, g.local, &g.scenario, &g.map);
 
     const int next = g.latest + 1;
     const int round = (g.latest + 2) / 2;
@@ -494,6 +508,15 @@ int your_turn_count() {
     std::lock_guard<std::mutex> l(g_mu);
     int n = 0;
     for (const Game& g : g_snap.games) n += g.status == Status::YourTurn;
+    return n;
+}
+
+std::string scenario_label(const Game& g) {
+    static const char* names[] = { "EUROPA (PRACTICE)", "EUROPA", "GANYMEDE", "CALLISTO" };
+    if (g.scenario < 0) return "EUROPA (PRACTICE)";   /* new online games: Practice only */
+    if (g.scenario > 3) return "AN UNKNOWN SCENARIO";
+    std::string n = names[g.scenario];
+    if (g.scenario != 0 && g.map > 0) n += " MAP " + std::to_string(g.map + 1);
     return n;
 }
 

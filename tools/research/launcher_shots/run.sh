@@ -17,4 +17,11 @@ trap 'kill $pr 2>/dev/null' EXIT
 sleep 1
 d=$(mktemp -d); mkdir -p "$d/a/shots" "$d/b/shots"
 (cd "$d/a" && "$bin" A) && (cd "$d/b" && "$bin" B) && (cd "$d/a" && "$bin" A2)
+# A version-2 turn file 1 on Ganymede map 2 (header only: scenario byte 48,
+# map byte 49), as if A's game had written it but could not send it.
+code=$(cat "$d/a/code.txt")
+mkdir -p "$d/a/online-turns/$code"
+python3 -c 'import struct,sys; h=b"CHTF"+struct.pack("<HBBI",2,0,0,1)+bytes(36)+bytes([2,1,0,0]); open(sys.argv[1],"wb").write(h)' \
+    "$d/a/online-turns/$code/turn-000001.cht"
+(cd "$d/a" && "$bin" A3)
 echo "pictures in $d/a/shots and $d/b/shots"

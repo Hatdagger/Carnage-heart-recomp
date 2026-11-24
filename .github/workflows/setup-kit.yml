@@ -215,7 +215,7 @@ jobs:
           if [[ -n "${MISSING}" ]]; then echo "${MISSING}"; echo "::error::launcher needs libraries SteamOS lacks"; exit 1; fi
           printf 'FILE "Carnage Heart (USA) (Track 1).bin" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n' > "Carnage Heart (USA).cue"
           : > "Carnage Heart (USA) (Track 1).bin"
-          DIR="$(APPIMAGE="$PWD/CarnageHeart.AppImage" CH_APPIMAGE_INSTALL_ONLY=1 sh squashfs-root/AppRun)"
+          DIR="$(APPIMAGE="$PWD/CarnageHeart.AppImage" CH_APPIMAGE_INSTALL_ONLY=1 CH_SKIP_TOOLCHAIN=1 sh squashfs-root/AppRun)"
           test -x "${DIR}/CarnageHeart_Recompiled"
           test -L "${DIR}/disc/Carnage Heart (USA).cue"
           test -L "${DIR}/disc/Carnage Heart (USA) (Track 1).bin"
@@ -246,9 +246,14 @@ jobs:
           AI=$(ls appimage/*.AppImage | head -1); chmod +x "${AI}"
           mkdir deck && cp "${AI}" deck/CarnageHeart.AppImage && cd deck
           ./CarnageHeart.AppImage --appimage-extract >/dev/null
-          DIR="$(APPIMAGE="$PWD/CarnageHeart.AppImage" CH_APPIMAGE_INSTALL_ONLY=1 sh squashfs-root/AppRun)"
-          cd "${DIR}"
           test ! -e /usr/include/X11/Xlib.h || { echo "::error::container has X11 headers"; exit 1; }
+          ! command -v cmake || { echo "::error::container has cmake"; exit 1; }
+          # AppRun gets the compiler pack itself when the system has no build tools.
+          DIR="$(APPIMAGE="$PWD/CarnageHeart.AppImage" CH_APPIMAGE_INSTALL_ONLY=1 sh squashfs-root/AppRun)"
+          TC="${HOME}/.local/share/CarnageHeart/toolchain"
+          test -x "${TC}/bin/cmake" || { echo "::error::AppRun did not get the compiler pack"; exit 1; }
+          export PATH="${TC}/bin:${PATH}" RETCOMM_TOOLCHAIN_DIR="${TC}"
+          cd "${DIR}"
           python3 psxrecomp/psxrecomp_cli.py ensure-toolchain --project-root "$PWD"
           python3 psxrecomp/psxrecomp_cli.py ensure-emitters --project-root "$PWD"
           python3 - <<'PY'

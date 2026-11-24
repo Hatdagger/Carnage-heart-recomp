@@ -32,6 +32,7 @@ fi
 
 install -m 755 "${ROOT}/packaging/appimage/AppRun" "${APPDIR}/AppRun"
 install -m 644 "${ROOT}/packaging/appimage/carnageheart.desktop" "${APPDIR}/carnageheart.desktop"
+install -m 644 "${ROOT}/packaging/appimage/get_toolchain.py" "${APPDIR}/usr/share/carnageheart/get_toolchain.py"
 install -m 644 "${ROOT}/assets/psxrecomp.png" "${APPDIR}/carnageheart.png"
 ln -sf carnageheart.png "${APPDIR}/.DirIcon"
 

@@ -19,8 +19,9 @@
 # AppImage (or in CarnageHeart/disc/). Files beside the AppImage are linked
 # into CarnageHeart/disc/, where the setup wizard finds them.
 #
-# CH_APPIMAGE_INSTALL_ONLY=1 copies and links, prints the folder and exits
-# (used by CI).
+# CH_APPIMAGE_INSTALL_ONLY=1 copies, links and gets the compiler pack, prints
+# the folder and exits; CH_SKIP_TOOLCHAIN=1 skips the compiler pack (both
+# used by CI).
 set -eu
 
 HERE="$(dirname "$(readlink -f "$0")")"
@@ -98,6 +99,45 @@ link_disc() {
     return 0
 }
 link_disc
+
+# Build tools. The kit builds the game on this machine. SteamOS has no
+# CMake, Ninja or C compiler, and this framework version only downloads its
+# portable compiler pack on Windows, so fetch the pack once here (into
+# ~/.local/share/CarnageHeart/toolchain; CH_TOOLCHAIN_DIR overrides) and put
+# it first on PATH. The pack brings clang with its own system headers and a
+# prebuilt SDL3, so nothing has to be installed on the system.
+have() { command -v "$1" >/dev/null 2>&1; }
+native_tools() {
+    have cmake && have ninja && { have cc || have gcc || have clang; } &&
+        { have c++ || have g++ || have clang++; }
+}
+TC="${CH_TOOLCHAIN_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/CarnageHeart/toolchain}"
+if [ "${CH_SKIP_TOOLCHAIN:-0}" != 1 ] && { [ -x "$TC/bin/cmake" ] || ! native_tools; }; then
+    if [ ! -x "$TC/bin/cmake" ]; then
+        say "no build tools on this system: getting the compiler pack (once)"
+        GET="$HERE/usr/share/carnageheart/get_toolchain.py"
+        if have zenity && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+            python3 "$GET" "$TC" ${CH_TOOLCHAIN_URL:+"$CH_TOOLCHAIN_URL"} | zenity --progress --auto-close --no-cancel \
+                --title="Carnage Heart" --width=420 \
+                --text="Getting the compiler pack (about 830 MB, only once)" || true
+        else
+            python3 "$GET" "$TC" ${CH_TOOLCHAIN_URL:+"$CH_TOOLCHAIN_URL"} | while IFS= read -r line; do
+                case "$line" in "# "*) say "${line#\# }" ;; esac
+            done
+        fi
+        if [ ! -x "$TC/bin/cmake" ]; then
+            msg="Could not get the compiler pack. Check the internet connection and start Carnage Heart again."
+            if have zenity && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+                zenity --error --title="Carnage Heart" --text="$msg" || true
+            fi
+            say "$msg"
+            exit 1
+        fi
+    fi
+    PATH="$TC/bin:$PATH"
+    RETCOMM_TOOLCHAIN_DIR="$TC"
+    export PATH RETCOMM_TOOLCHAIN_DIR
+fi
 
 if [ "${CH_APPIMAGE_INSTALL_ONLY:-0}" = 1 ]; then
     printf '%s\n' "$GAME"

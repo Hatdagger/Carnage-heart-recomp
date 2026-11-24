@@ -69,3 +69,52 @@ jobs:
           gh release create android-devkit --draft --title "Android devkit (private draft, build sandbox only)" \
             --notes "Not a game release. Private draft used by the build sandbox." \
             -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" "$RUNNER_TEMP/android-devkit.tar.xz"
+
+  # Resolves the exact archives the Windows/Linux setup kit downloads for
+  # "Build Android app" and prints their SHA-256 (copied into
+  # scripts/android/android_tools.json by hand).
+  pins:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Resolve and hash tool archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, re, subprocess, urllib.request, xml.etree.ElementTree as ET
+          base = "https://dl.google.com/android/repository/"
+          xml = urllib.request.urlopen(base + "repository2-3.xml").read()
+          root = ET.fromstring(xml)
+          want = {"ndk;27.3.13750724": "ndk", "build-tools;35.0.0": "build-tools", "platforms;android-35": "platform"}
+          picks = {}
+          for pkg in root.iter("remotePackage"):
+              path = pkg.get("path")
+              if path not in want:
+                  continue
+              for arc in pkg.iter("archive"):
+                  hos = arc.findtext("host-os") or "any"
+                  url = arc.find("complete").findtext("url")
+                  if hos in ("windows", "linux", "any"):
+                      picks[f"{want[path]}-{hos}"] = base + url
+          rel = json.loads(subprocess.check_output(["gh", "api", "repos/adoptium/temurin21-binaries/releases/latest"]))
+          for a in rel["assets"]:
+              n = a["name"]
+              if re.match(r"OpenJDK21U-jdk_x64_windows_hotspot_.*\.zip$", n):
+                  picks["jdk-windows"] = a["browser_download_url"]
+              if re.match(r"OpenJDK21U-jdk_x64_linux_hotspot_.*\.tar\.gz$", n):
+                  picks["jdk-linux"] = a["browser_download_url"]
+          out = {}
+          for k, url in sorted(picks.items()):
+              h = hashlib.sha256(); size = 0
+              with urllib.request.urlopen(url) as r:
+                  while True:
+                      b = r.read(1 << 20)
+                      if not b: break
+                      h.update(b); size += len(b)
+              out[k] = {"url": url, "sha256": h.hexdigest(), "size": size}
+              print(k, size, flush=True)
+          print("PINS_JSON_BEGIN")
+          print(json.dumps(out, indent=2))
+          print("PINS_JSON_END")
+          PY

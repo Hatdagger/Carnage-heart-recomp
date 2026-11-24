@@ -88,6 +88,12 @@ if(PSX_RECOMP_UI)
     if(TARGET psx-runtime-pgxp)
         ch_add_launcher_menu(psx-runtime-pgxp)
     endif()
+    # Setup wizard writes setup-log.txt in the game folder (cmake/ch_setup_log.cmake).
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ch_setup_log.cmake")
+    ch_add_setup_log(psx-runtime)
+    if(TARGET psx-runtime-pgxp)
+        ch_add_setup_log(psx-runtime-pgxp)
+    endif()
 endif()
 
 # PlayStation Mouse support restored from Carnage Heart EZ (src/mouse_pad_hle.c),

@@ -60,6 +60,8 @@ Pointer mode is off during netplay. Set `CH_POINTER=0` to turn it off.
 
 No game data or recompiled code is downloaded; everything game-specific comes from your disc.
 
+If setup fails, open `setup-log.txt` in the same folder as the exe. It records every setup step, including the build that runs in a console window after the wizard closes. Send that file when you report a problem.
+
 ## Build from your own disc (developers)
 
 You need your own Redump dump of Carnage Heart (USA): the `.cue` and all three `.bin` tracks.

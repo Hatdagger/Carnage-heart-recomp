@@ -124,6 +124,8 @@ jobs:
             -DFETCHCONTENT_SOURCE_DIR_SDL3="${SDL_SRC}" \
             2>&1 | tee configure.log
           grep -q 'setup host (no game C' configure.log || { echo "::error::did not configure as a setup host"; exit 1; }
+          grep -q 'Carnage Heart setup log: on' configure.log || { echo "::error::setup log hook not applied (cmake/ch_setup_log.cmake)"; exit 1; }
+          if grep -q 'Carnage Heart setup log:.*changed' configure.log; then echo "::error::setup log anchors changed in psxrecomp"; exit 1; fi
           cmake --build build-setup --target psx-runtime -j"$(nproc)"
 
       - name: Package kit
@@ -144,6 +146,7 @@ jobs:
           LIST="$(unzip -Z1 "${ZIP}")"
           for must in game.toml CMakeLists.txt codegen_setup.c src/mouse_pad_hle.c \
                       src/disc_autodetect.c seeds/ psxrecomp/psxrecomp_cli.py recomp-ui/ \
+                      launcher/ch_setup_log.inc launcher/ch_setup_tee.py cmake/ch_setup_log.cmake \
                       psxrecomp/recompiler/lib/rabbitizer/include/generated/InstrId_enum.h \
                       psxrecomp/recompiler/lib/rabbitizer/cplusplus/include/generated/; do
             grep -q "^${must}" <<<"${LIST}" || { echo "::error::kit lacks ${must}"; exit 1; }

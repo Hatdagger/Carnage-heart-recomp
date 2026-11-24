@@ -1,6 +1,6 @@
 # Carnage Heart ReComp: Multiplayer Plan
 
-Researched 2026-11-21, updated 2026-11-24 (launcher shows the scenario; launcher Online screen, catching up when the map opens), 2026-11-23 after the first real two-copy test, and 2026-11-22 after the campaign RAM mapping, the VS/saves mapping, the hot-seat test and the first turn files (see [CAMPAIGN_RAM_MAP.md](CAMPAIGN_RAM_MAP.md) and [VS_MODE_AND_SAVES.md](VS_MODE_AND_SAVES.md)).
+Researched 2026-11-21, updated 2026-11-24 (Android Online screen and notifications; launcher shows the scenario; launcher Online screen, catching up when the map opens), 2026-11-23 after the first real two-copy test, and 2026-11-22 after the campaign RAM mapping, the VS/saves mapping, the hot-seat test and the first turn files (see [CAMPAIGN_RAM_MAP.md](CAMPAIGN_RAM_MAP.md) and [VS_MODE_AND_SAVES.md](VS_MODE_AND_SAVES.md)).
 
 **Priority (decided 2026-11-21): campaign versus (Option C) comes first.** VS mode (Options A and B) is less important and comes later.
 
@@ -150,7 +150,7 @@ So nobody needs the "press End Turn once to catch up" step any more, and orders 
 Known gaps:
 - ~~The map start does not check which scenario was started~~ (done, step 6d below).
 - If player A's very first End Turn happens while the relay can't be reached, that End Turn waits for the relay and then ends without sending; A presses End Turn again to play turn 1 (production ran once for nothing).
-- Desktop only for now; the Android notifications need chat C's APK.
+- ~~Desktop only for now~~ (Android: step 6e below).
 
 ### Scenario check (2026-11-24, step 6d)
 **Found**: the scenario is kept at `0x800DF384` (gp+44): 0 Europa (Practice), 1 Europa, 2 Ganymede, 3 Callisto; the map number within the scenario is next to it at `0x800DF388` (gp+48, from 0). Found by starting each of the four scenarios from a fresh boot and comparing memory; confirmed by the code: the next-map routine `0x80036C70` calls the map set-up `0x80037240(scenario, map)` with exactly these two, and the save/new-game code (`0x80039340`, `0x8007DD5C`) writes both.
@@ -177,6 +177,26 @@ A campaign save is one 5-block file whose body is a straight copy of the campaig
 - **Notifications**: no push server at first. The Android app checks for new turn files in the background (about every 15 minutes) and posts a local notification. Desktop checks when the launcher opens.
 - **Storage** of turn files: the small relay (above).
 
+### Android: Online screen, relay without curl, "your turn" notifications (2026-11-24, step 6e)
+Branch `online-android`, **PR #9** (on top of v0.1.3 main, which already has PR #2 and the Android port).
+- **Start screen → ONLINE CAMPAIGN** (`android/.../OnlineActivity.java`): the Android version of the launcher's Online screen. Your games with whose turn it is (YOUR TURN, WAITING, SENDING, OVER, OFFLINE), NEW GAME, JOIN A GAME (type the code; lower case, spaces and a missing dash are fine), and a page per game: the code in large letters, which player you are, the scenario to start, PLAY / PLAY (SOFTWARE RENDERER), CHECK AGAIN, SHARE CODE (sends the code through any chat app), FORGET (press twice). The Back button goes back a page, then to the start screen.
+- **Same files as the desktop**: games in `files/online-turns/games.txt`, turn files in `files/online-turns/<code>/`. `GameActivity` puts the four `CH_TURN_*` switches in the environment (`Os.setenv`) before the game starts; a normal PLAY clears them.
+- **No curl on Android**: `src/turn_relay.c` now sends its two requests (GET a file, PUT a file) through a small helper; on desktop it is curl as before, on Android it calls `Relay.java` (HttpURLConnection, the system's TLS) through JNI (`src/android/ch_android_relay.c`). The answers are given as curl's codes (0 / 22 / 7), so the relay thread works the same on both.
+- **"It's your turn" notifications** (`TurnCheckJob.java`): Android's JobScheduler runs a check about every 15 minutes when there is a connection (Android may stretch this to save battery; it carries on after a restart). For each game it does what the desktop launcher's check does (sends a turn file the game could not, fetches new ones) and posts "Carnage Heart: it's your turn — Player B has played (game K7QX-M2PD, turn 3)" once per turn, or "game ... is over". Tapping it opens that game's page. No notification while the game is open (it fetches the turn itself). Android 13+ asks for permission to notify when a game is made or joined.
+- **Found**: the app had no `INTERNET` permission, so online play could never have worked on Android without this. Added, plus `POST_NOTIFICATIONS` and `RECEIVE_BOOT_COMPLETED`.
+- `CH_REMOTE_BATTLE` is on in the Android build (`cmake/ch_android.cmake`).
+
+**Tested**
+- `tools/research/android_relay_test/run.sh`: `Relay.java` run on a PC with a stand-in `Context`, against the local relay and **the real Cloudflare relay**: create, join (lower case, wrong code, third player refused), the game's `nativePut`/`nativeGet` (wrong key refused, retried upload fine, missing file = 22 and no file left, no connection = 7), sending a turn the game could not, a new device catching up, game over on both sides, games.txt, forget. All 19 checks pass on both.
+- The turn simulator (`turnsim/run.sh`, online cases included) still passes with the changed `turn_relay.c`.
+- The APK builds (sandbox devkit) and contains the online code.
+
+**Not tested yet**: anything on a device: the JNI path from the game's relay thread, the screen itself, the notification. Needs the owner's tablet (and a second copy: the desktop game or a second Android device).
+
+Known gaps
+- The notification icon is the app icon (Android shows it as a plain shape in the status bar).
+- If the game is still running in the background and PLAY is pressed for a different online game, Android brings back the running game with its old switches. Closing the game first avoids this.
+
 ## Option A: Live VS over the internet (later)
 PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card becomes the match's slot-2 card. Both players open VS mode and watch the same battle.
 - Work: turn on `PSX_NETPLAY`, set `guest_memcard = 1`. VS mode reads whole saves from card slots 1 and 2 (confirmed), so the guest's card in slot 2 should appear as the right-hand stack.
@@ -192,9 +212,23 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 3. ~~Map the player order screens (including re-orders) and factory data~~ (done 2026-11-22).
 4. ~~Local hot-seat test on one machine: end turn, swap sides, play the other side~~ (done 2026-11-22, `src/hotseat.c`).
 5. ~~Turn files: capture orders and battle results on one copy, apply them on a second copy~~ (done 2026-11-22, `src/turn_files.c`; tested in the real game 2026-11-23).
-6. ~~Waiting without freezing the game~~ and ~~storage: the turn relay~~ (done 2026-11-23). ~~Launcher Online screen, closing after sending, catching up on start (also from the relay on a new device), desktop "your turn" check~~ (done 2026-11-24). ~~Scenario check~~ (done 2026-11-24). ~~Real relay test~~ (done 2026-11-24, session 4). Next: Android notifications.
+6. ~~Waiting without freezing the game~~ and ~~storage: the turn relay~~ (done 2026-11-23). ~~Launcher Online screen, closing after sending, catching up on start (also from the relay on a new device), desktop "your turn" check~~ (done 2026-11-24). ~~Scenario check~~ (done 2026-11-24). ~~Real relay test~~ (done 2026-11-24, session 4). ~~Android: Online screen and notifications~~ (built 2026-11-24, session 5, PR #9). Next: test on a device.
 7. Optional: visual replay of the enemy's turn from the orders in the file.
 8. Later: Options A and B (the card and save layout they need is now mapped).
+
+## Session status (chat B, 2026-11-24, session 5)
+**Done**
+- Hub merged PR #2 and the Android port into main (v0.1.3). New branch `online-android` on top of it, **PR #9**: the online campaign in the Android app (step 6e above): Online screen, relay requests through Java (no curl on Android), `CH_TURN_*` switches from the app, "it's your turn" notifications every ~15 minutes, `INTERNET` permission (was missing).
+- `Relay.java` tested on a PC against the local and the real relay (`tools/research/android_relay_test/run.sh`, all pass); turn simulator still passes; APK built.
+
+**Next**
+- Owner: install the test APK on the Legion Tab and try ONLINE CAMPAIGN: NEW GAME, then join it from the PC launcher (or the other way round), play a turn each, and wait for the notification. Then SAVE LOG TO DOWNLOADS and attach the log.
+- Test APK rebuilt with the owner's key (`carnageheart.keystore`, SHA-256 19:6D:C3:EC...C9:98): installs over the old test app.
+- Hub: merge PR #9 after the device test.
+- Later: visual replay of the enemy's turn (step 7); Options A and B.
+
+**Blocked**
+- Device test needs the owner.
 
 ## Session status (chat B, 2026-11-24, session 4)
 **Done**

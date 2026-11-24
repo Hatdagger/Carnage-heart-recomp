@@ -47,6 +47,7 @@ public class SetupActivity extends Activity {
     private Button pickButton;
     private Button playButton;
     private Button playSoftButton;
+    private Button onlineButton;
     private Button scaleButton;
     private Button shareButton;
     private Button saveLogButton;
@@ -156,6 +157,19 @@ public class SetupActivity extends Activity {
         ps.topMargin = dp(12);
         root.addView(playSoftButton, ps);
         playSoftButton.setVisibility(View.GONE);
+
+        // Online campaign against a friend (OnlineActivity).
+        onlineButton = new Button(this);
+        onlineButton.setTextSize(18);
+        onlineButton.setText("ONLINE CAMPAIGN");
+        onlineButton.setOnClickListener(v -> {
+            startActivity(new Intent(this, OnlineActivity.class));
+            finish();
+        });
+        LinearLayout.LayoutParams op = wrap();
+        op.topMargin = dp(12);
+        root.addView(onlineButton, op);
+        onlineButton.setVisibility(View.GONE);
 
         shareButton = new Button(this);
         shareButton.setText("SHARE LAST LOG");
@@ -369,6 +383,8 @@ public class SetupActivity extends Activity {
         playButton.setVisibility(View.VISIBLE);
         playSoftButton.setVisibility(View.VISIBLE);
         scaleButton.setVisibility(View.VISIBLE);
+        onlineButton.setVisibility(View.VISIBLE);
+        if (!Relay.load(this).isEmpty()) TurnCheckJob.schedule(this);
         File log = logFile();
         int logVis = log.isFile() && log.length() > 0 ? View.VISIBLE : View.GONE;
         shareButton.setVisibility(logVis);

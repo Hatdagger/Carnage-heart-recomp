@@ -16,7 +16,9 @@
  *
  * It runs on its own thread and never holds up the game. Network access goes
  * through the system's own curl (as the launcher's updater does): Windows 10+
- * and desktop Linux ship one, so the game carries no TLS code.
+ * and desktop Linux ship one, so the game carries no TLS code. Android has no
+ * curl program; there the requests go to the app's Java side
+ * (src/android/ch_android_relay.c -> Relay.java, HttpURLConnection).
  *
  * Run-time switches (all three turn it on):
  *   CH_TURN_RELAY=<url>    the relay, e.g. https://ch-turns.example.workers.dev
@@ -32,6 +34,15 @@
 #ifdef _WIN32
 #  include <windows.h>
 #  include <direct.h>
+#elif defined(__ANDROID__)
+#  include <pthread.h>
+#  include <sys/stat.h>
+#  include <time.h>
+#  include <unistd.h>
+/* src/android/ch_android_relay.c. Same results as curl -f: 0 done, 22 HTTP
+ * error (the relay answered "no"), anything else: could not reach it. */
+int ch_android_http_get(const char *url, const char *out_path, int connect_s, int max_s);
+int ch_android_http_put(const char *url, const char *key, const char *in_path, int max_s);
 #else
 #  include <pthread.h>
 #  include <spawn.h>
@@ -60,6 +71,7 @@ static void sleep_ms(int ms)
 #endif
 }
 
+#ifndef __ANDROID__
 /* Run curl with these arguments; returns its exit code (22: HTTP error). */
 static int run_curl(const char *const *args)
 {
@@ -96,6 +108,44 @@ static int run_curl(const char *const *args)
     int st = 0;
     if (waitpid(pid, &st, 0) < 0) return -1;
     return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+#endif
+}
+#endif
+
+/* GET url into out_path / PUT in_path to url with my key. Return codes as
+ * curl -f gives them (0 done, 22 HTTP error, other: no connection). */
+static int http_get(const char *url, const char *out_path, int connect_s, int max_s)
+{
+#ifdef __ANDROID__
+    return ch_android_http_get(url, out_path, connect_s, max_s);
+#else
+    char ct[16], mt[16];
+    snprintf(ct, sizeof ct, "%d", connect_s);
+    snprintf(mt, sizeof mt, "%d", max_s);
+    const char *args[] = { "-sf", "--connect-timeout", ct, "--max-time", mt, "-o", out_path, url, NULL };
+    return run_curl(args);
+#endif
+}
+
+static int http_put(const char *url, const char *key, const char *in_path, int max_s)
+{
+#ifdef __ANDROID__
+    return ch_android_http_put(url, key, in_path, max_s);
+#else
+    char at[620], hdr[200], mt[16];
+    snprintf(at, sizeof at, "@%s", in_path);
+    snprintf(hdr, sizeof hdr, "X-CH-Key: %s", key);
+    snprintf(mt, sizeof mt, "%d", max_s);
+    const char *args[] = { "-sSf", "--max-time", mt, "-X", "PUT", "-H", hdr,
+                           "-H", "Content-Type: application/octet-stream",
+                           "--data-binary", at, "-o",
+#ifdef _WIN32
+                           "NUL",
+#else
+                           "/dev/null",
+#endif
+                           url, NULL };
+    return run_curl(args);
 #endif
 }
 
@@ -135,21 +185,10 @@ static int is_mine(uint32_t seq) { return (int)((seq & 1u) == 0) == g_role; }
 
 static int upload(uint32_t seq)
 {
-    char path[600], url[700], at[620], hdr[200];
+    char path[600], url[700];
     path_for(path, sizeof path, seq);
     snprintf(url, sizeof url, "%s/v1/games/%s/turns/%u", g_url, g_game, (unsigned)seq);
-    snprintf(at, sizeof at, "@%s", path);
-    snprintf(hdr, sizeof hdr, "X-CH-Key: %s", g_key);
-    const char *args[] = { "-sSf", "--max-time", "30", "-X", "PUT", "-H", hdr,
-                           "-H", "Content-Type: application/octet-stream",
-                           "--data-binary", at, "-o",
-#ifdef _WIN32
-                           "NUL",
-#else
-                           "/dev/null",
-#endif
-                           url, NULL };
-    const int rc = run_curl(args);
+    const int rc = http_put(url, g_key, path, 30);
     if (rc == 0)
         fprintf(stderr, "[relay] turn file %u is on the relay\n", (unsigned)seq);
     else
@@ -163,8 +202,7 @@ static int download(uint32_t seq)
     path_for(path, sizeof path, seq);
     snprintf(part, sizeof part, "%s.dl", path);
     snprintf(url, sizeof url, "%s/v1/games/%s/turns/%u", g_url, g_game, (unsigned)seq);
-    const char *args[] = { "-sf", "--max-time", "30", "-o", part, url, NULL };
-    const int rc = run_curl(args);
+    const int rc = http_get(url, part, 30, 30);
     if (rc != 0) { remove(part); return 0; }   /* 22 = not there yet */
     FILE *f = fopen(part, "rb");
     unsigned char h[12] = { 0 };
@@ -184,8 +222,7 @@ static int catch_up(void)
     char url[700], out[600];
     snprintf(url, sizeof url, "%s/v1/games/%s", g_url, g_game);
     snprintf(out, sizeof out, "%s/.relay-status.json", g_dir);
-    const char *args[] = { "-sf", "--connect-timeout", "5", "--max-time", "15", "-o", out, url, NULL };
-    const int rc = run_curl(args);
+    const int rc = http_get(url, out, 5, 15);
     char buf[512] = { 0 };
     FILE *f = rc == 0 ? fopen(out, "rb") : NULL;
     if (f) { const size_t got = fread(buf, 1, sizeof buf - 1, f); buf[got] = 0; fclose(f); }

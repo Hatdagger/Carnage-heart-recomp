@@ -1,5 +1,9 @@
 package com.hatdagger.carnageheart;
 
+import android.os.Bundle;
+import android.system.ErrnoException;
+import android.system.Os;
+
 import java.io.File;
 
 import org.libsdl.app.SDLActivity;
@@ -15,6 +19,48 @@ public class GameActivity extends SDLActivity {
     static final String RENDERER_SOFTWARE = "software";
     /** GPU internal resolution from the start screen: "2x", "3x" or "4x". */
     static final String EXTRA_SCALE = "scale";
+    /** Online campaign game code (OnlineActivity's PLAY); absent: normal game. */
+    static final String EXTRA_ONLINE_GAME = "online_game";
+
+    /** True while the game is open (TurnCheckJob then posts no notification). */
+    static volatile boolean running;
+
+    @Override
+    protected void onCreate(Bundle saved) {
+        setOnlineSwitches();
+        running = true;
+        super.onCreate(saved);
+    }
+
+    @Override
+    protected void onDestroy() {
+        running = false;
+        super.onDestroy();
+    }
+
+    /** The relay switches src/turn_files.c and src/turn_relay.c read with
+     *  getenv() (the desktop launcher sets the same ones). The game runs in
+     *  this process, so they are set here, before SDL starts it; a normal
+     *  game clears them. The turn folder is files/online-turns/<code>, the
+     *  game's default (it runs with files/ as its folder). */
+    private void setOnlineSwitches() {
+        String code = getIntent() != null ? getIntent().getStringExtra(EXTRA_ONLINE_GAME) : null;
+        Relay.Game g = code != null ? Relay.find(this, code) : null;
+        try {
+            Os.unsetenv("CH_TURN_DIR");
+            if (g == null) {
+                Os.unsetenv("CH_TURN_RELAY");
+                Os.unsetenv("CH_TURN_GAME");
+                Os.unsetenv("CH_TURN_KEY");
+                Os.unsetenv("CH_TURN_ROLE");
+                return;
+            }
+            Os.setenv("CH_TURN_RELAY", Relay.base(g.relay), true);
+            Os.setenv("CH_TURN_GAME", g.code, true);
+            Os.setenv("CH_TURN_KEY", g.key, true);
+            Os.setenv("CH_TURN_ROLE", String.valueOf(g.role), true);
+        } catch (ErrnoException ignored) { }
+    }
 
     private String scale() {
         String s = getIntent() != null ? getIntent().getStringExtra(EXTRA_SCALE) : null;

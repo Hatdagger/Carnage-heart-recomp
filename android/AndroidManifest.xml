@@ -17,6 +17,12 @@
 
     <!-- Controller rumble. -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Online campaign: the turn relay, "your turn" notifications, and the
+         background check carrying on after a restart. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:label="Carnage Heart"
@@ -40,6 +46,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Online campaign: games, NEW GAME, JOIN A GAME, PLAY. -->
+        <activity
+            android:name=".OnlineActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:screenOrientation="sensorLandscape"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+
+        <!-- "It's your turn" check, about every 15 minutes. -->
+        <service
+            android:name=".TurnCheckJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <!-- The game (SDL3). -->
         <activity

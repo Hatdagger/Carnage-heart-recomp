@@ -26,6 +26,7 @@
 
 int ch_android_real_main(int argc, char *argv[]);
 void ch_android_watch_start(void);
+void ch_android_relay_init(void);
 
 /* The OpenGL renderer (translated to GLES 3.1+, ch_android_gles.c) needs an
  * OpenGL ES 3.1+ context and GL_EXT_blend_func_extended (dual-source
@@ -221,6 +222,17 @@ int SDL_main(int argc, char *argv[])
     /* Test 8: cores, clock, run/wait, thermal and hot guest code every 2 s
      * (ch_android_watch.c), to explain the 40 fps still-screen slowdown. */
     ch_android_watch_start();
+
+    /* Online campaign: the relay requests go through Relay.java
+     * (ch_android_relay.c); look the class up here, on a Java thread. */
+    {
+        const char *game = getenv("CH_TURN_GAME");
+        if (game && *game) {
+            ch_android_relay_init();
+            printf("Carnage Heart (Android): online game %s, player %s\n", game,
+                   getenv("CH_TURN_ROLE") ? getenv("CH_TURN_ROLE") : "?");
+        }
+    }
 
     int rc = ch_android_real_main(argc, args);
     printf("Carnage Heart (Android): main returned %d\n", rc);

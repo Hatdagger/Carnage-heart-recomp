@@ -16,6 +16,10 @@ foreach(_ch_off PSX_RECOMP_UI PSX_SETUP_WIZARD PSX_NETPLAY PSX_ENABLE_VULKAN
                 PSX_OPENXR PSX_PGXP_VARIANT PSX_DEBUG_TOOLS PSX_REWIND)
     set(${_ch_off} OFF CACHE BOOL "Off on Android" FORCE)
 endforeach()
+# Online campaign (turn files through the relay): on in the app, which has
+# its own Online screen (android/.../OnlineActivity.java) and does the relay
+# requests in Java (src/android/ch_android_relay.c).
+set(CH_REMOTE_BATTLE ON CACHE BOOL "Remote-player battles / online campaign")
 set(PSX_SDL3_FETCH OFF CACHE BOOL "Android: SDL3 comes from SDL3_DIR" FORCE)
 
 # Configure checks compile only: an Android test program can't be linked the
@@ -56,6 +60,7 @@ function(ch_android_finish_target target)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_main.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_perf.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_watch.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_relay.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_ucontext_aarch64.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_gl_shims.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_gles.c"

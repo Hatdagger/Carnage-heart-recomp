@@ -90,6 +90,13 @@ int SDL_main(int argc, char *argv[])
     if (chdir(files) != 0)
         fprintf(stderr, "chdir(%s) failed: %s\n", files, strerror(errno));
     setenv("PSX_ANDROID", "1", 1);
+    /* Speed report in the log every 2 s: time in game code vs. waiting, and
+     * how much overlay code ran native vs. interpreted (test APK 3: the game
+     * runs at ~75% speed on the Y700 Gen 2). Shared with "SHARE LAST LOG". */
+    setenv("PSX_RUNTIME_PERF_DIAG", "1", 0);
+    setenv("PSX_RUNTIME_PERF_DIAG_MS", "2000", 0);
+    /* fps, emulation busy % and render busy % every 2 s. */
+    setenv("PSX_FRAME_REPORT_MS", "2000", 0);
     /* Back button / gesture: a key the game sees (Circle, in pointer_menu.c)
      * instead of closing the app. */
     SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");

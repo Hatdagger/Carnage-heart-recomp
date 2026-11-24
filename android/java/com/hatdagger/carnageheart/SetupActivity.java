@@ -21,6 +21,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import java.io.File;
+import java.io.RandomAccessFile;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -44,6 +45,8 @@ public class SetupActivity extends Activity {
     private TextView message;
     private ProgressBar progress;
     private Button pickButton;
+    private Button playButton;
+    private Button shareButton;
     private boolean busy;
 
     @Override
@@ -68,7 +71,7 @@ public class SetupActivity extends Activity {
                 }
                 File disc = GameFiles.findDisc(GameFiles.discDir(this));
                 if (disc != null) {
-                    startGame();
+                    showReady();
                 } else {
                     askForDisc(null);
                 }
@@ -114,6 +117,24 @@ public class SetupActivity extends Activity {
         bp.topMargin = dp(24);
         root.addView(pickButton, bp);
         pickButton.setVisibility(View.GONE);
+
+        playButton = new Button(this);
+        playButton.setText("PLAY");
+        playButton.setTextSize(18);
+        playButton.setOnClickListener(v -> startGame());
+        LinearLayout.LayoutParams pp = wrap();
+        pp.topMargin = dp(24);
+        root.addView(playButton, pp);
+        playButton.setVisibility(View.GONE);
+
+        shareButton = new Button(this);
+        shareButton.setText("SHARE LAST LOG");
+        shareButton.setTextSize(16);
+        shareButton.setOnClickListener(v -> shareLog());
+        LinearLayout.LayoutParams sp = wrap();
+        sp.topMargin = dp(12);
+        root.addView(shareButton, sp);
+        shareButton.setVisibility(View.GONE);
 
         setContentView(root);
     }
@@ -290,6 +311,43 @@ public class SetupActivity extends Activity {
         }
         name = name.replace('/', '_').replace('\\', '_');
         return new String[] { name, size };
+    }
+
+    private File logFile() {
+        return new File(getFilesDir(), "carnageheart.log");
+    }
+
+    /** Disc is in place: offer PLAY, and SHARE LAST LOG when the previous run
+     *  left a log (starting the game overwrites it). */
+    private void showReady() {
+        setStatus("Ready.", false);
+        playButton.setVisibility(View.VISIBLE);
+        File log = logFile();
+        shareButton.setVisibility(log.isFile() && log.length() > 0 ? View.VISIBLE : View.GONE);
+    }
+
+    /** Sends the end of the last game log as text (mail, Drive, a chat app). */
+    private void shareLog() {
+        File log = logFile();
+        final int max = 200 * 1024;
+        String text;
+        try (RandomAccessFile f = new RandomAccessFile(log, "r")) {
+            long len = f.length();
+            long start = Math.max(0, len - max);
+            byte[] b = new byte[(int) (len - start)];
+            f.seek(start);
+            f.readFully(b);
+            text = (start > 0 ? "[... start of log cut ...]\n" : "")
+                + new String(b, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            setStatus("Could not read the log: " + e.getMessage(), false);
+            return;
+        }
+        Intent send = new Intent(Intent.ACTION_SEND);
+        send.setType("text/plain");
+        send.putExtra(Intent.EXTRA_SUBJECT, "Carnage Heart log");
+        send.putExtra(Intent.EXTRA_TEXT, text);
+        startActivity(Intent.createChooser(send, "Share log"));
     }
 
     private void startGame() {

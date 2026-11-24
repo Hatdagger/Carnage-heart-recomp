@@ -60,6 +60,14 @@ Pointer mode is off during netplay. Set `CH_POINTER=0` to turn it off.
 
 No game data or recompiled code is downloaded; everything game-specific comes from your disc.
 
+### Android app
+
+Once the game is installed, the launcher shows **BUILD ANDROID APP**. It opens a window that builds `CarnageHeart.apk` from your installed game (the first time it downloads the Android tools once). When it says Finished, copy `CarnageHeart.apk` from the game folder to your phone or tablet.
+
+<p align="center">
+  <img src="docs/screenshots/launcher-build-android-app.png" alt="Launcher main menu with BUILD ANDROID APP selected" width="400">
+</p>
+
 ## Build from your own disc (developers)
 
 You need your own Redump dump of Carnage Heart (USA): the `.cue` and all three `.bin` tracks.

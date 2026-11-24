@@ -678,4 +678,69 @@ bool restart_into_rebuild() {
 #endif
 }
 
+/* ---- Build Android App ----------------------------------------------------- */
+
+#ifdef _WIN32
+const char* const kAndroidLauncher = "Build Android App.bat";
+#else
+const char* const kAndroidLauncher = "build-android-app.sh";
+#endif
+
+bool android_builder_available() {
+    const fs::path root = kit_root();
+    std::error_code ec;
+    return !root.empty() &&
+           fs::is_regular_file(root / "scripts" / "android" / "build_android_app.py", ec) &&
+           fs::is_regular_file(root / kAndroidLauncher, ec);
+}
+
+bool start_android_build(std::string* why) {
+    const fs::path root = kit_root();
+    std::error_code ec;
+    const fs::path script = root / kAndroidLauncher;
+    if (root.empty() || !fs::is_regular_file(script, ec)) {
+        if (why) *why = "THE ANDROID BUILDER IS NOT IN THIS VERSION";
+        return false;
+    }
+#ifdef _WIN32
+    /* A console of its own, so the player sees the progress and the .bat's
+     * closing "press any key". cmd /c ""path"" keeps spaces in the path. */
+    std::wstring cmd = L"cmd.exe /c \"\"" + script.wstring() + L"\"\"";
+    std::vector<wchar_t> buf(cmd.begin(), cmd.end()); buf.push_back(0);
+    STARTUPINFOW si; PROCESS_INFORMATION pi;
+    std::memset(&si, 0, sizeof si); si.cb = sizeof si;
+    std::memset(&pi, 0, sizeof pi);
+    const std::wstring cwd = root.wstring();
+    if (!CreateProcessW(nullptr, buf.data(), nullptr, nullptr, FALSE,
+                        CREATE_NEW_CONSOLE, nullptr, cwd.c_str(), &si, &pi)) {
+        if (why) *why = "COULD NOT OPEN THE BUILD WINDOW";
+        return false;
+    }
+    CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
+    return true;
+#else
+    /* Linux: the first terminal program found; it waits for Enter at the end
+     * so the messages stay readable. */
+    const std::string sh = script.string();
+    const std::string run =
+        "cd \"$(dirname \"$0\")\" && bash \"$0\"; echo; read -r -p 'Press Enter to close. ' _";
+    struct Term { const char* exe; const char* flag; };
+    static const Term terms[] = {
+        { "x-terminal-emulator", "-e" }, { "gnome-terminal", "--" },
+        { "konsole", "-e" }, { "xfce4-terminal", "-x" }, { "xterm", "-e" },
+    };
+    for (const Term& t : terms) {
+        std::vector<std::string> args = { t.exe, t.flag, "bash", "-c", run, sh };
+        std::vector<char*> argv;
+        for (std::string& a : args) argv.push_back(a.data());
+        argv.push_back(nullptr);
+        pid_t pid = 0;
+        if (posix_spawnp(&pid, t.exe, nullptr, nullptr, argv.data(), environ) == 0)
+            return true;
+    }
+    if (why) *why = "NO TERMINAL FOUND: RUN build-android-app.sh";
+    return false;
+#endif
+}
+
 } /* namespace ch_update */

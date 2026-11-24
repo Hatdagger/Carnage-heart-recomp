@@ -110,6 +110,13 @@ def extract(archive: Path, dest: Path) -> None:
                     os.makedirs(long_path(target), exist_ok=True)
                     continue
                 os.makedirs(long_path(target.parent), exist_ok=True)
+                unix_mode = info.external_attr >> 16
+                if not IS_WIN and stat.S_ISLNK(unix_mode):
+                    # The Linux NDK links clang -> clang-18 etc.
+                    if target.is_symlink() or target.exists():
+                        target.unlink()
+                    os.symlink(z.read(info).decode("utf-8"), target)
+                    continue
                 with z.open(info) as src, open(long_path(target), "wb") as out:
                     shutil.copyfileobj(src, out, 1 << 20)
                 mode = (info.external_attr >> 16) & 0o777

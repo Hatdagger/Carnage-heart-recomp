@@ -113,7 +113,7 @@ def build_sdl3(a, work, cmake, ninja):
 
 
 def build_game(a, sdl_prefix, cmake, ninja):
-    if not (ROOT / "generated" / "SCUS_946.04_dispatch.c").is_file():
+    if not a.allow_no_game and not (ROOT / "generated" / "SCUS_946.04_dispatch.c").is_file():
         raise SystemExit("generated/ has no game C. Generate it from your disc first "
                          "(the setup kit does this when it installs the PC game).")
     bld = Path(a.build_dir)
@@ -269,6 +269,8 @@ def main():
     ap.add_argument("--keystore", default=str(ROOT / "android-signing" / "carnageheart.keystore"))
     ap.add_argument("--out", default=str(ROOT / "CarnageHeart.apk"))
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 2)
+    ap.add_argument("--allow-no-game", action="store_true",
+                    help="CI check: build without generated/ (the APK has no game in it)")
     ap.add_argument("--skip-native", action="store_true",
                     help="reuse the already built game library (Java/APK changes only)")
     a = ap.parse_args()

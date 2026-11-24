@@ -1,6 +1,6 @@
 # Carnage Heart ReComp: Multiplayer Plan
 
-Researched 2026-11-21, updated 2026-11-24 (launcher Online screen, catching up when the map opens), 2026-11-23 after the first real two-copy test, and 2026-11-22 after the campaign RAM mapping, the VS/saves mapping, the hot-seat test and the first turn files (see [CAMPAIGN_RAM_MAP.md](CAMPAIGN_RAM_MAP.md) and [VS_MODE_AND_SAVES.md](VS_MODE_AND_SAVES.md)).
+Researched 2026-11-21, updated 2026-11-24 (launcher shows the scenario; launcher Online screen, catching up when the map opens), 2026-11-23 after the first real two-copy test, and 2026-11-22 after the campaign RAM mapping, the VS/saves mapping, the hot-seat test and the first turn files (see [CAMPAIGN_RAM_MAP.md](CAMPAIGN_RAM_MAP.md) and [VS_MODE_AND_SAVES.md](VS_MODE_AND_SAVES.md)).
 
 **Priority (decided 2026-11-21): campaign versus (Option C) comes first.** VS mode (Options A and B) is less important and comes later.
 
@@ -163,6 +163,8 @@ Known gaps:
 
 Why "switch off" rather than "refuse to start": the map is already open when the check runs, and a normal campaign is a safe state that can't damage the online game. The player only needs to restart and pick the right scenario.
 
+**Launcher shows the scenario** (2026-11-24, session 4): the game page says "SCENARIO: EUROPA (PRACTICE)" (or e.g. "GANYMEDE MAP 2"), read from the newest turn file's bytes 48/49; the games list says "START ..." for the selected game. Before any turn file it shows Europa (Practice). Screenshot `docs/screenshots/launcher-online-scenario.png`; tested with a new step in `launcher_shots/run.sh`.
+
 **Tested**: simulator (`turnsim/run.sh`, two new cases: a copy started on Europa against a Europa (Practice) game loads and sends nothing; a new game started on Ganymede writes no turn file); the real two-copy online test (`online_demo.py`) still plays through to victory/defeat with no desyncs, and its logs show "map start: Europa (Practice), as in the turn files"; and in the real game, a copy started on Europa against that game's turn files said "Europa started, but this online game is on Europa (Practice)", loaded nothing and wrote no file, and its End Turn ran as a normal campaign. (The bottom line itself is not in headless screenshots; the log shows it was set.)
 
 ### Saves and memory cards: mapped (2026-11-22)
@@ -193,6 +195,19 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 6. ~~Waiting without freezing the game~~ and ~~storage: the turn relay~~ (done 2026-11-23). ~~Launcher Online screen, closing after sending, catching up on start (also from the relay on a new device), desktop "your turn" check~~ (done 2026-11-24). ~~Scenario check~~ (done 2026-11-24). Next: a real relay test, then Android notifications.
 7. Optional: visual replay of the enemy's turn from the orders in the file.
 8. Later: Options A and B (the card and save layout they need is now mapped).
+
+## Session status (chat B, 2026-11-24, session 4)
+**Done**
+- Launcher shows each online game's scenario (commit 1e51af8 on `research/vs-battle-and-saves`): "SCENARIO: ..." on the game page, "START ..." in the games list, from byte 48/49 of the newest turn file. Tested with `launcher_shots/run.sh` (new step with a Ganymede map 2 turn file).
+- Walked the owner through the Cloudflare relay setup (`relay/README.md`).
+
+**Next**
+- Owner: finish the relay setup and send the address; then the real online test (`CH_RELAY_URL=<address> python3 tools/research/online_demo.py`) and building the address in (`-DCH_TURN_RELAY_URL=`). The online test also needs the disc image attached (the game code is generated from it).
+- Android notifications after chat C has an APK.
+- Release builds need `-DCH_REMOTE_BATTLE=ON` for the Online Campaign entry to work.
+
+**Blocked**
+- Real relay test: waiting for the relay address and the disc image.
 
 ## Session status (chat B, 2026-11-24, session 3)
 **Done**

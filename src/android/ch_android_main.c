@@ -13,6 +13,9 @@
  *   3. passes on the arguments the activity chose (--no-launcher, --disc ...).
  */
 #include <SDL3/SDL.h>
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <GLES3/gl3.h>
 #include <android/log.h>
 #include <errno.h>
 #include <pthread.h>
@@ -22,6 +25,58 @@
 #include <unistd.h>
 
 int ch_android_real_main(int argc, char *argv[]);
+
+/* The OpenGL renderer (translated to GLES 3.1+, ch_android_gles.c) needs an
+ * OpenGL ES 3.1+ context and GL_EXT_blend_func_extended (dual-source
+ * blending for the PS1 semi-transparency modes). Checked on a throwaway
+ * pbuffer context before the game starts, so a GPU without them goes straight
+ * to the software renderer. Returns 1 if the GPU renderer can run. */
+static int ch_probe_gles(void)
+{
+    EGLDisplay d = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (d == EGL_NO_DISPLAY || !eglInitialize(d, NULL, NULL)) {
+        printf("android gles probe: no EGL display\n");
+        return 0;
+    }
+    const EGLint cattr[] = { EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT_KHR,
+                             EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_NONE };
+    EGLConfig cfg;
+    EGLint n = 0;
+    if (!eglChooseConfig(d, cattr, &cfg, 1, &n) || n < 1) {
+        printf("android gles probe: no OpenGL ES 3 config\n");
+        return 0;
+    }
+    const EGLint sattr[] = { EGL_WIDTH, 16, EGL_HEIGHT, 16, EGL_NONE };
+    EGLSurface surf = eglCreatePbufferSurface(d, cfg, sattr);
+    eglBindAPI(EGL_OPENGL_ES_API);
+    const EGLint xattr[] = { EGL_CONTEXT_MAJOR_VERSION_KHR, 3, EGL_CONTEXT_MINOR_VERSION_KHR, 2, EGL_NONE };
+    EGLContext ctx = eglCreateContext(d, cfg, EGL_NO_CONTEXT, xattr);
+    int ok = 0;
+    if (surf != EGL_NO_SURFACE && ctx != EGL_NO_CONTEXT && eglMakeCurrent(d, surf, surf, ctx)) {
+        GLint maj = 0, min = 0;
+        glGetIntegerv(GL_MAJOR_VERSION, &maj);
+        glGetIntegerv(GL_MINOR_VERSION, &min);
+        const char *ver = (const char *)glGetString(GL_VERSION);
+        const char *gpu = (const char *)glGetString(GL_RENDERER);
+        GLint next = 0;
+        int dual = 0;
+        glGetIntegerv(GL_NUM_EXTENSIONS, &next);
+        for (GLint i = 0; i < next; i++) {
+            const char *e = (const char *)glGetStringi(GL_EXTENSIONS, (GLuint)i);
+            if (e && !strcmp(e, "GL_EXT_blend_func_extended")) dual = 1;
+        }
+        ok = (maj > 3 || (maj == 3 && min >= 1)) && dual;
+        printf("android gles probe: %s / %s; ES %d.%d, GL_EXT_blend_func_extended %s -> %s\n",
+               ver ? ver : "?", gpu ? gpu : "?", maj, min, dual ? "yes" : "no",
+               ok ? "GPU renderer" : "software renderer");
+        eglMakeCurrent(d, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    } else {
+        printf("android gles probe: OpenGL ES 3.2 context failed (0x%x)\n", eglGetError());
+    }
+    if (ctx != EGL_NO_CONTEXT) eglDestroyContext(d, ctx);
+    if (surf != EGL_NO_SURFACE) eglDestroySurface(d, surf);
+    return ok;
+}
 
 static int s_log_pipe[2] = { -1, -1 };
 static FILE *s_log_file;
@@ -95,11 +150,6 @@ int SDL_main(int argc, char *argv[])
      * runs at ~75% speed on the Y700 Gen 2). Shared with "SHARE LAST LOG". */
     setenv("PSX_RUNTIME_PERF_DIAG", "1", 0);
     setenv("PSX_RUNTIME_PERF_DIAG_MS", "2000", 0);
-    /* The software renderer draws on the CPU; the player setting's default
-     * Internal resolution (4x, meant for the PC's OpenGL renderer) made it
-     * rasterise 16x the pixels and held the Y700 Gen 2 at ~45 fps with audio
-     * underruns (test 3 log). Native 1x until the GLES renderer exists. */
-    setenv("PSX_INTERNAL_RESOLUTION", "native", 0);
     /* fps, emulation busy % and render busy % every 2 s. */
     setenv("PSX_FRAME_REPORT_MS", "2000", 0);
     /* Back button / gesture: a key the game sees (Circle, in pointer_menu.c)
@@ -117,6 +167,23 @@ int SDL_main(int argc, char *argv[])
 
     printf("Carnage Heart (Android): game folder %s\n", files);
     for (int i = 1; i < argc; i++) printf("  arg %d: %s\n", i, argv[i]);
+
+    /* PLAY asks for the OpenGL renderer; PLAY (SOFTWARE RENDERER) for software.
+     * Without the GPU features it needs, OpenGL becomes software here. */
+    int gpu = 0;
+    for (int i = 1; i + 1 < argc; i++) {
+        if (!strcmp(args[i], "--renderer") && !strcmp(args[i + 1], "opengl")) {
+            if (ch_probe_gles()) gpu = 1;
+            else args[i + 1] = "software";
+        }
+    }
+    /* The software renderer draws on the CPU; the player setting's default
+     * Internal resolution (4x, meant for the OpenGL renderer) made it
+     * rasterise 16x the pixels and held the Y700 Gen 2 at ~45 fps with audio
+     * underruns (test 3 log). The GPU renderer uses the player setting. */
+    if (!gpu) setenv("PSX_INTERNAL_RESOLUTION", "native", 0);
+    printf("Carnage Heart (Android): renderer %s\n",
+           gpu ? "OpenGL ES (internal resolution from settings)" : "software (native resolution)");
 
     int rc = ch_android_real_main(argc, args);
     printf("Carnage Heart (Android): main returned %d\n", rc);

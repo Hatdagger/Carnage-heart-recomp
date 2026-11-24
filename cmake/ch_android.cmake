@@ -56,7 +56,9 @@ function(ch_android_finish_target target)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_main.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_perf.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_ucontext_aarch64.c"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_gl_shims.c")
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_gl_shims.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_gles.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_gles_translate.c")
     target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/android")
     # Bionic has no getcontext/makecontext/swapcontext; psx_fiber.c gets the
     # declarations from this header and the code from ch_ucontext_aarch64.S.
@@ -79,6 +81,12 @@ function(ch_android_finish_target target)
         target_compile_definitions(${target} PRIVATE CH_WRAP_RENDER_PRESENT=1)
         target_link_options(${target} PRIVATE "-Wl,--wrap=SDL_RenderPresent")
     endif()
+    # The runtime's OpenGL renderer on OpenGL ES 3.2: context attributes,
+    # shader translation and a few desktop-only formats (ch_android_gles.c).
+    target_link_options(${target} PRIVATE
+        "-Wl,--wrap=SDL_GL_SetAttribute" "-Wl,--wrap=SDL_GL_GetProcAddress"
+        "-Wl,--wrap=glTexImage2D" "-Wl,--wrap=glTexSubImage2D" "-Wl,--wrap=glReadPixels"
+        "-Wl,--wrap=gl_renderer_init_context")
     target_link_libraries(${target} PRIVATE android log EGL GLESv3 OpenSLES)
     target_link_options(${target} PRIVATE "-Wl,-z,max-page-size=16384")
 endfunction()

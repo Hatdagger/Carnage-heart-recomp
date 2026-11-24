@@ -46,6 +46,7 @@ public class SetupActivity extends Activity {
     private ProgressBar progress;
     private Button pickButton;
     private Button playButton;
+    private Button playSoftButton;
     private Button shareButton;
     private boolean busy;
 
@@ -121,11 +122,22 @@ public class SetupActivity extends Activity {
         playButton = new Button(this);
         playButton.setText("PLAY");
         playButton.setTextSize(18);
-        playButton.setOnClickListener(v -> startGame());
+        playButton.setOnClickListener(v -> startGame(GameActivity.RENDERER_GPU));
         LinearLayout.LayoutParams pp = wrap();
         pp.topMargin = dp(24);
         root.addView(playButton, pp);
         playButton.setVisibility(View.GONE);
+
+        // The CPU renderer of test APK 5 (native resolution), in case the
+        // GPU renderer misbehaves on a device.
+        playSoftButton = new Button(this);
+        playSoftButton.setText("PLAY (SOFTWARE RENDERER)");
+        playSoftButton.setTextSize(14);
+        playSoftButton.setOnClickListener(v -> startGame(GameActivity.RENDERER_SOFTWARE));
+        LinearLayout.LayoutParams ps = wrap();
+        ps.topMargin = dp(12);
+        root.addView(playSoftButton, ps);
+        playSoftButton.setVisibility(View.GONE);
 
         shareButton = new Button(this);
         shareButton.setText("SHARE LAST LOG");
@@ -196,7 +208,7 @@ public class SetupActivity extends Activity {
             final String problem = result;
             ui.post(() -> {
                 busy = false;
-                if (problem == null) startGame();
+                if (problem == null) startGame(GameActivity.RENDERER_GPU);
                 else askForDisc(problem);
             });
         }, "ch-import").start();
@@ -322,6 +334,7 @@ public class SetupActivity extends Activity {
     private void showReady() {
         setStatus("Ready.", false);
         playButton.setVisibility(View.VISIBLE);
+        playSoftButton.setVisibility(View.VISIBLE);
         File log = logFile();
         shareButton.setVisibility(log.isFile() && log.length() > 0 ? View.VISIBLE : View.GONE);
     }
@@ -350,8 +363,10 @@ public class SetupActivity extends Activity {
         startActivity(Intent.createChooser(send, "Share log"));
     }
 
-    private void startGame() {
-        startActivity(new Intent(this, GameActivity.class));
+    private void startGame(String renderer) {
+        Intent i = new Intent(this, GameActivity.class);
+        i.putExtra(GameActivity.EXTRA_RENDERER, renderer);
+        startActivity(i);
         finish();
     }
 

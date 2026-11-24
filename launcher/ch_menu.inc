@@ -358,8 +358,9 @@ static void draw_share_page(LauncherModel*, const Gfx& g, const Input& in) {
           "See OKE designs and chip programs other players have shared, look at "
           "them, and copy one onto your memory card." },
         { "SHARE MY DATA", "SOON", false,
-          "Pick a save from your memory card and share it, without opening "
-          "GitHub yourself." },
+          "Pick a save from your memory card and share it through the same "
+          "relay as online games: you get a short code to give to a friend. "
+          "No account needed." },
     };
     bool back = false;
     list_page(g, in, PAGE_SHARE, "SHARE DATA", "TRADE OKES AND PROGRAMS",
@@ -426,10 +427,11 @@ static void draw_update_page(LauncherModel* m, const Gfx& g, const Input& in) {
     text(g, 38.0f, 296.0f, 11.0f, kText,
          "An update downloads the new setup kit from this game's GitHub releases "
          "and replaces the kit's own files. Your disc image, memory cards, "
-         "settings and installed mods are not touched. After installing, the "
-         "game is rebuilt from your disc once, the same way it was the first "
-         "time, which takes a few minutes. The internet is used only when you "
-         "press a button here.", 560.0f);
+         "settings, online games and installed mods are not touched. After "
+         "installing, the game is rebuilt once. Most updates keep the game "
+         "code made from your disc and only rebuild, which is quicker; a few "
+         "make it again from the disc, as on the first install. The internet "
+         "is used only when you press a button here.", 560.0f);
     const bool back = footer(g, "A / ENTER / LEFT CLICK  SELECT      B / ESC / RIGHT CLICK  BACK", true);
 
     if ((in.back || back) && !busy) { open_page(PAGE_MAIN); return; }

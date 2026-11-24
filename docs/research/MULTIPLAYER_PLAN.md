@@ -111,10 +111,13 @@ Known gaps:
 - Each copy uses its own save for its own designs; there is no check that both started the same scenario.
 - The "waiting" status line was not seen on screen in the test (headless copies draw no window); the log lines were.
 
-### Turn-file storage: to choose (step 6b)
-The shared folder has to be replaced by something on the internet. Two choices (the same one will be used for Share Data):
-- **A small relay** (recommended): a tiny web service (for example a free Cloudflare Worker with storage) that keeps turn files under a game code. Players type or share a short code; no accounts. It works the same from Windows, Linux and Android, it can list shared designs for Share Data, and it could send push notifications later. Cost: the project owner sets up one free account once and the relay is code that has to be kept running (very small).
-- **GitHub sign-in in the launcher**: each player signs in with GitHub (a one-time code shown in the launcher) and turn files go into a private repository both players can write to (or one player's, with the other invited). No server to run. But every player needs a GitHub account and has to accept an invitation for each game, and sharing with strangers (Share Data) needs a public repository or Issues.
+### Turn-file storage: a small relay, built (2026-11-23, step 6b)
+**Decided 2026-11-23 by the project owner: a small relay** (not GitHub sign-in). Share Data will use the same relay later.
+
+- **`relay/worker.js`**: a Cloudflare Worker (one file, free plan, storage in Workers KV). No accounts: creating a game gives a code like `K7QX-M2PD` and player A's secret key; joining gives player B's key (only once). Only A's key can store odd turn files and only B's the even ones; files must come in order and can't be changed once stored. `GET /v1/games/<code>` says whose turn it is (for the launcher's "your turn" check and notifications). Setup steps for the owner are in `relay/README.md`.
+- **`src/turn_relay.c`**: the game keeps its folder of turn files, and a background thread keeps it in step with the relay through the system's curl (as the launcher's updater does): it uploads my files as soon as they are written (retrying until the relay has them) and fetches the file the game is waiting for every 3 seconds. Switches: `CH_TURN_RELAY`, `CH_TURN_GAME`, `CH_TURN_KEY` (plus `CH_TURN_ROLE`); the folder defaults to `online-turns/<code>`.
+- **Tested**: `node relay/test.mjs` (the relay's rules); the simulator plays an online game with separate folders through the relay run locally (`relay/dev_server.mjs`); and **two real copies with separate folders played the capture game through the local relay** to the victory/defeat screens, no desyncs. Not yet tested on a real Cloudflare deployment (needs the owner's account).
+- Gap: a player who starts on a new device (empty folder) is not caught up from the relay yet; player A would even try to start a new game there (the relay refuses it, so nothing breaks, but it would not play).
 
 ### Saves and memory cards: mapped (2026-11-22)
 A campaign save is one 5-block file whose body is a straight copy of the campaign tables in RAM (cards, units, bases, OKEs, globals). No checksum found. A single design is one 1152-byte record at a known offset. See VS_MODE_AND_SAVES.md.
@@ -141,20 +144,22 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 3. ~~Map the player order screens (including re-orders) and factory data~~ (done 2026-11-22).
 4. ~~Local hot-seat test on one machine: end turn, swap sides, play the other side~~ (done 2026-11-22, `src/hotseat.c`).
 5. ~~Turn files: capture orders and battle results on one copy, apply them on a second copy~~ (done 2026-11-22, `src/turn_files.c`; tested in the real game 2026-11-23).
-6. ~~Waiting without freezing the game~~ (done 2026-11-23). Then storage (replace the shared folder; choice pending), closing the game after sending and catching up on start, then notifications (desktop: when the launcher opens; Android later).
+6. ~~Waiting without freezing the game~~ and ~~storage: the turn relay~~ (done 2026-11-23). Next: an Online screen in the launcher (create/join a game, relay address), closing the game after sending and catching up on start (also from the relay on a new device), then notifications (desktop: when the launcher opens; Android later).
 7. Optional: visual replay of the enemy's turn from the orders in the file.
 8. Later: Options A and B (the card and save layout they need is now mapped).
 
 ## Session status (chat B, 2026-11-23)
 **Done**
 - Real two-copy turn-file test: capture game, battle game and restart all worked; no desyncs.
-- Fixed the frozen waiting copy: it now keeps running and shows a "waiting" line until the opponent's file arrives (`src/hotseat.c`, `src/turn_files.c`; simulator updated to check it).
-- Test helpers: `boot_europa.py`, `un7z.py` now unpacks archives with a compressed header; the demo instructions cover Release builds (`PSX_DEBUG_SERVER=1`) and separate memory cards per copy.
+- Fixed the frozen waiting copy: it keeps running and shows a "waiting" line until the opponent's file arrives.
+- Storage decided (small relay) and built: `relay/worker.js` (Cloudflare Worker) and `src/turn_relay.c` (game side). Two real copies played a full online game through the relay run locally.
+- Test helpers: `boot_europa.py`, `un7z.py` (compressed 7z headers), relay tests and local relay server, online scenario in the simulator.
 
 **Next**
-- Build turn-file storage once the owner has chosen (relay recommended).
-- Let the player close the game after sending; on start, catch up automatically instead of needing one End Turn.
-- Launcher: "It's your turn" check when the launcher opens (changes on this branch; chat A owns `launcher/`).
+- Owner: set up the relay on Cloudflare (`relay/README.md`, about 10 minutes) and send the relay address.
+- Launcher Online screen (on this branch; chat A owns `launcher/`): create or join a game by code, keep the key, start the game with the switches, and on opening check `GET /v1/games/<code>` to show "It's your turn".
+- Let the player close the game after sending; on start, catch up automatically (also from the relay on an empty folder) instead of needing one End Turn.
+- Android notifications after chat C has an APK.
 
 **Blocked**
-- Storage choice (relay or GitHub sign-in) is waiting for the project owner.
+- A real (non-local) relay test needs the owner's Cloudflare relay address.

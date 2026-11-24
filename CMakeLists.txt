@@ -129,6 +129,7 @@ psxrecomp_select_guest_implementation(
     HLE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/remote_battle.c"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/hotseat.c"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/turn_files.c"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/turn_relay.c"
     REFERENCE_PREFIX ch_remote_lle_
     SNAPSHOT_TAG 0x43485243)
 endif()

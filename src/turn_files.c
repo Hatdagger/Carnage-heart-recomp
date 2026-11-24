@@ -29,11 +29,14 @@
  * the file too, for the "what happened" log now and for a visual replay
  * later.
  *
- * Transport (until step 6 adds online storage): a shared folder. Turn N is
- * <CH_TURN_DIR>/turn-NNNNNN.cht. A writes the odd numbers, B the even ones.
+ * Transport: a folder. Turn N is <CH_TURN_DIR>/turn-NNNNNN.cht. A writes the
+ * odd numbers, B the even ones. Two copies on one PC can share the folder;
+ * online, turn_relay.c uploads my files to the turn relay and downloads the
+ * opponent's into the folder (CH_TURN_RELAY, CH_TURN_GAME, CH_TURN_KEY).
  *
  * Run-time switches:
- *   CH_TURN_DIR=<folder>   the shared folder (turns this mode on)
+ *   CH_TURN_DIR=<folder>   the shared folder (turns this mode on; optional
+ *                          with a relay, see turn_relay.c)
  *   CH_TURN_ROLE=A|B       which player this copy is (default A)
  *
  * Starting and resuming: the first End Turn of a session only RECEIVES,
@@ -105,6 +108,11 @@
 #define TF_MAX_BODY     (TF_TABLES + TF_CARDS + 1u + TF_MAX_ORDERS * TF_ORDER_SIZE + \
                          1u + TF_MAX_BATTLES * TF_BATTLE_SIZE)
 
+/* turn_relay.c: keeps the folder in step with the online relay. */
+int ch_relay_start(int role, const char *dir, char *dir_out, size_t dir_n);
+void ch_relay_want(uint32_t seq);
+static int g_relay;
+
 /* From hotseat.c: the waiting side's design cards (28 x 1152, flat). */
 uint8_t *ch_hotseat_other_cards(void);
 
@@ -134,10 +142,12 @@ int ch_turns_active(void)
     if (g_on < 0) {
         const char *d = getenv("CH_TURN_DIR");
         const char *r = getenv("CH_TURN_ROLE");
-        g_on = (d && *d);
+        g_role = (r && (*r == 'B' || *r == 'b' || *r == '2')) ? 1 : 0;
+        /* Online (turn_relay.c): the relay fills a local folder. */
+        g_relay = ch_relay_start(g_role, d, g_dir, sizeof g_dir);
+        g_on = g_relay || (d && *d);
         if (g_on) {
-            snprintf(g_dir, sizeof g_dir, "%s", d);
-            g_role = (r && (*r == 'B' || *r == 'b' || *r == '2')) ? 1 : 0;
+            if (!g_relay) snprintf(g_dir, sizeof g_dir, "%s", d);
             fprintf(stderr, "[turns] on: player %c, folder %s\n", g_role ? 'B' : 'A', g_dir);
         }
     }
@@ -495,6 +505,7 @@ static int finish_load(CPUState *cpu, uint32_t len)
 {
     const int over = load_file(cpu, g_want, len);
     set_waiting_status(0);
+    if (g_relay) ch_relay_want(0);
     g_next_send = g_want + 1;
     g_synced = 1;
     g_receive_only = 0;
@@ -531,6 +542,7 @@ int ch_turns_swap_point(CPUState *cpu, int game_over)
     fprintf(stderr, "[turns] waiting for turn file %u from player %c (the game keeps running)\n",
             (unsigned)g_want, g_want & 1u ? 'A' : 'B');
     set_waiting_status(1);
+    if (g_relay) ch_relay_want(g_want);
     g_polls = 0;
     return -1;
 }

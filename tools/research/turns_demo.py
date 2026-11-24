@@ -1,23 +1,34 @@
 """Turn-file test with two copies of the game on one PC (multiplayer plan step 5).
 
-Start both copies from build/ on one shared folder, each at Europa (Practice)
-turn 1 on the Command menu with Tactics selected (Start, X on Start Game, X,
-X on Europa; funds 500000):
+Start both copies from build/ on one shared folder, each with its own memory
+cards, debug port and log. Start them a few seconds apart (two copies starting
+at the same moment can trip over each other's mod state file). In a Release
+build the debug server is off unless PSX_DEBUG_SERVER=1:
 
-  CH_TURN_DIR=research/turns CH_TURN_ROLE=A ./CarnageHeart_Recompiled --no-launcher \
+  PSX_DEBUG_SERVER=1 CH_TURN_DIR=research/turns CH_TURN_ROLE=A ./CarnageHeart_Recompiled \
+      --no-launcher --memcard-dir research/cardA \
       --disc "../disc/Carnage Heart (USA).cue" --debug-port 4370 > research/A.log 2>&1 &
-  CH_TURN_DIR=research/turns CH_TURN_ROLE=B ./CarnageHeart_Recompiled --no-launcher \
+  PSX_DEBUG_SERVER=1 CH_TURN_DIR=research/turns CH_TURN_ROLE=B ./CarnageHeart_Recompiled \
+      --no-launcher --memcard-dir research/cardB \
       --disc "../disc/Carnage Heart (USA).cue" --debug-port 4371 > research/B.log 2>&1 &
+
+(add --headless to run without windows). Use a new, empty turns folder for a
+new game. Bring each copy to Europa (Practice) turn 1 on the Command menu with
+Tactics selected: `python3 tools/research/boot_europa.py 4370` (and 4371), then
+press Circle once on each (or by hand: Start, X on Start Game, X, X on Europa;
+funds 500000).
 
 Then: python3 tools/research/turns_demo.py [rounds]
 Same game as the hot-seat demo (hotseat.py demo), across two copies: A ends
 turn 1; B presses End Turn once to receive it, forms a unit and sends it to
 capture A's start base; then both end turns until B takes the base (game
 over: victory on B, defeat on A) or the rounds run out. The logs show the
-[turns] lines (sent, loaded, what the opponent did) for each copy.
+[turns] lines (sent, loaded, what the opponent did) for each copy. For a
+battle, give A a unit on Defend before starting (hotseat.form_and_order(1,
+(140, 135)) from the Command menu with End Turn selected).
 
-A copy that is waiting for the other's turn file is paused (its window does
-not respond): only drive a copy after its log says it loaded a file.
+A copy that is waiting for the other's turn file keeps running (its window
+and debug server respond) and loads the file as soon as it appears.
 """
 import sys, os, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

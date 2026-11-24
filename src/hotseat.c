@@ -321,11 +321,52 @@ void func_8001BCB0(CPUState *cpu)
     ch_remote_lle_func_8001BCB0(cpu);
 }
 
+/* Turn files: waiting for the opponent without pausing the game. While
+ * waiting, this hook "calls" the game's VSync (one frame) with itself as the
+ * return address, so the game keeps running frames (and the window and the
+ * debug server keep responding), and checks for the file after each frame.
+ * The registers End Turn had when it called the hook are kept and put back
+ * when the file has been loaded, then the original function runs as if
+ * nothing had happened. */
+#define FN_VSYNC     0x800AC734u   /* PsyQ VSync(mode); mode 0 = next frame */
+#define FN_SWAP_HOOK 0x8008A2B8u
+int ch_turns_poll(CPUState *cpu);
+static int g_tf_waiting;
+static uint32_t g_tf_gpr[32], g_tf_hi, g_tf_lo;
+
+static void tf_wait_a_frame(CPUState *cpu)
+{
+    cpu->gpr[4] = 0;                 /* VSync(0) */
+    cpu->gpr[31] = FN_SWAP_HOOK;     /* ...then back here */
+    cpu->pc = FN_VSYNC;
+}
+
+static void tf_resume(CPUState *cpu, int over)
+{
+    memcpy(cpu->gpr, g_tf_gpr, sizeof g_tf_gpr);
+    cpu->hi = g_tf_hi;
+    cpu->lo = g_tf_lo;
+    cpu->pc = 0;
+    g_tf_waiting = 0;
+    if (over) {
+        fprintf(stderr, "[hotseat] game over\n");
+        g_ready = 0;
+    }
+}
+
 /* Called only from End Turn, after the bases are counted for the win/lose
  * check: the turn is over, swap the sides. */
 void func_8008A2B8(CPUState *cpu)
 {
-    if (cpu->pc == 0 && ch_hotseat_active() && g_ready) {
+    if (g_tf_waiting) {
+        /* Back from one frame of VSync while waiting for the opponent. */
+        const int r = ch_turns_poll(cpu);
+        if (r < 0) {
+            tf_wait_a_frame(cpu);
+            return;
+        }
+        tf_resume(cpu, r);
+    } else if (cpu->pc == 0 && ch_hotseat_active() && g_ready) {
         /* If either side has no bases left, End Turn goes on to the win or
          * lose screens: no swap, so they are shown for the side that just
          * played. */
@@ -340,7 +381,16 @@ void func_8008A2B8(CPUState *cpu)
             /* Two copies: send my half, load the opponent's (turn_files.c). */
             if (g_snapped)
                 restore_waiting_side(cpu);
-            if (ch_turns_swap_point(cpu, !(mine && theirs))) {
+            const int r = ch_turns_swap_point(cpu, !(mine && theirs));
+            if (r < 0) {
+                memcpy(g_tf_gpr, cpu->gpr, sizeof g_tf_gpr);
+                g_tf_hi = cpu->hi;
+                g_tf_lo = cpu->lo;
+                g_tf_waiting = 1;
+                tf_wait_a_frame(cpu);
+                return;
+            }
+            if (r) {
                 fprintf(stderr, "[hotseat] game over\n");
                 g_ready = 0;
             }

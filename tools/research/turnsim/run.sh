@@ -1,6 +1,6 @@
 #!/bin/sh
 # Builds the simulator and plays A against B on a temporary folder, twice:
-# a straight game, then one where B closes the game after turn file 6 and
+# a straight game, then one where B closes the game after sending turn file 6 and
 # starts again from scratch (it must catch up from the folder).
 set -e
 here=$(cd "$(dirname "$0")" && pwd); src="$here/../../../src"
@@ -11,7 +11,6 @@ turns=${1:-8}
 play() {  # play <dir> <player> <turns> <log>
     CH_TURN_DIR="$1" CH_TURN_ROLE=$2 exec "$bin" $2 $3 > "$4" 2> "$4.err"
 }
-until_file() { while [ ! -f "$1" ]; do sleep 0.2; done; }
 
 echo "== straight game"
 d=$(mktemp -d)
@@ -22,9 +21,9 @@ python3 "$here/check.py" "$d/A.log" "$d/B.log"
 
 echo "== B restarts after turn file 6"
 d=$(mktemp -d)
-play "$d" B 99 "$d/B1.log" & pb=$!
+play "$d" B 4 "$d/B1.log" & pb=$!  # quits after sending file 6 (and loading 7)
 play "$d" A $turns "$d/A.log" & pa=$!
-until_file "$d/turn-000006.cht"; sleep 0.5; kill $pb
+wait $pb
 play "$d" B 99 "$d/B2.log" & pb=$!
 wait $pa; kill $pb 2>/dev/null || true; wait 2>/dev/null || true
 first=$(grep -m1 'loaded turn file' "$d/B2.log.err" | sed 's/.*turn file \([0-9]*\).*/\1/')

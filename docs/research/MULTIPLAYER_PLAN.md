@@ -1,6 +1,6 @@
 # Carnage Heart ReComp: Multiplayer Plan
 
-Researched 2026-11-21, updated 2026-11-22 after the campaign RAM mapping, the VS/saves mapping, the hot-seat test and the first turn files (see [CAMPAIGN_RAM_MAP.md](CAMPAIGN_RAM_MAP.md) and [VS_MODE_AND_SAVES.md](VS_MODE_AND_SAVES.md)).
+Researched 2026-11-21, updated 2026-11-23 after the first real two-copy test, and 2026-11-22 after the campaign RAM mapping, the VS/saves mapping, the hot-seat test and the first turn files (see [CAMPAIGN_RAM_MAP.md](CAMPAIGN_RAM_MAP.md) and [VS_MODE_AND_SAVES.md](VS_MODE_AND_SAVES.md)).
 
 **Priority (decided 2026-11-21): campaign versus (Option C) comes first.** VS mode (Options A and B) is less important and comes later.
 
@@ -74,7 +74,7 @@ Found on the way:
 
 What this means for step 5: the turn file can be written at the swap point. Everything the swap moves (units, bases, OKEs, funds, designs) is exactly what the other device needs, and the snapshot/restore shows which parts of End Turn belong to the side that just played.
 
-### Turn files: built, tested in a simulator (2026-11-22, step 5)
+### Turn files: built, tested in the real game (2026-11-22/23, step 5)
 **`src/turn_files.c`** (same `-DCH_REMOTE_BATTLE=ON` build; run with `CH_TURN_DIR=<shared folder>` and `CH_TURN_ROLE=A` or `B`). Two copies of the game play one campaign through a shared folder. It reuses all of hot-seat; only the swap point is different.
 
 **One change from the plan above: the turn file carries the state, and the receiver loads it instead of replaying the turn.** Replaying orders through the CPU brain (steps 2-3 of "How it would work") only gives the same result if both copies run End Turn identically, and End Turn does things for both sides with CPU rules (repair cap, research spending, production) that the hot-seat test had to undo by hand. Taking the sender's end state cannot drift, and a battle is still fought only once, on the device of the player who started it, who watches it. The orders and battle results are in the file too, so a visual replay ("watch what the enemy did") can be added later on top without risking the result.
@@ -82,7 +82,7 @@ What this means for step 5: the turn file can be written at the swap point. Ever
 How End Turn runs on each copy:
 1. My half, exactly as in hot-seat: my units move and fight (with the opponent's real designs), the CPU brain is skipped, the other side's records are snapshotted and put back, my production, repair and resupply run.
 2. At the swap point (`0x8008A2B8`): **send** the state after my half, already turned round to the opponent's point of view (units i <-> i+32, owner bytes 1 <-> 2, funds swapped), plus my design cards, the orders I gave (found by comparing my units with how they were at the start of my turn) and my battle results.
-3. **Wait** for the opponent's next file (the game is paused meanwhile), then **load** it: its tables go straight into RAM, its cards become the designs I fight next turn, and the turn counters are set. End Turn then goes on to the win/lose check as usual.
+3. **Wait** for the opponent's next file (the game keeps running meanwhile; see "Waiting without freezing" below), then **load** it: its tables go straight into RAM, its cards become the designs I fight next turn, and the turn counters are set. End Turn then goes on to the win/lose check as usual.
 
 Details:
 - **Files** are `turn-000001.cht`, `turn-000002.cht`... A writes the odd ones, B the even ones. About 37 KB each, mostly the 28 design cards. Written to a `.part` file and renamed, so a half-written file is never read. Layout at the top of `src/turn_files.c`.
@@ -92,13 +92,29 @@ Details:
 - **Game over**: when a side has no bases left, the last file is sent with a game-over flag; the receiver loads it and the game shows its win or lose screen.
 - **What the receiver sees**: the enemy's units jump to their new places, and the log lists what the enemy did ("their unit 32: formed, capture a base", "battle at (x,y): their unit 33 attacked your unit 2. Theirs: 420HP... Yours: ...").
 
-Tested with `tools/research/turnsim/run.sh`: the real `turn_files.c`, `hotseat.c` and `remote_battle.c` running in two processes on a fake RAM, with a stand-in End Turn that calls the hooks in the game's order. Checked over 8 rounds: each copy sees the other side exactly as its owner left it (units, OKE HP, funds, bases), turn numbers match, the CPU brain never runs, units only move on their owner's turn, a battle's result reaches the other copy, a player who quits and restarts catches up, and the game-over file ends both games. **Not yet run in the real game**: `tools/research/turns_demo.py` drives two real copies on one PC (see README).
+Tested with `tools/research/turnsim/run.sh`: the real `turn_files.c`, `hotseat.c` and `remote_battle.c` running in two processes on a fake RAM, with a stand-in End Turn that calls the hooks in the game's order. Checked over 8 rounds: each copy sees the other side exactly as its owner left it (units, OKE HP, funds, bases), turn numbers match, the CPU brain never runs, units only move on their owner's turn, a battle's result reaches the other copy, a player who quits and restarts catches up, and the game-over file ends both games.
+
+**Tested in the real game (2026-11-23)**, two copies on one Linux PC (`tools/research/turns_demo.py`), no desyncs:
+- **Capture game**: B formed a unit and ordered Capture on A's base; it marched one hex per B turn. On turn 6 it took A's undefended base: A got the defeat screen and B the victory screen, from the game-over turn file (screenshot `docs/screenshots/turn-files-two-copies-game-over.png`).
+- **Battle game**: A also formed a unit on Defend. On A's turn 4 A's defender met B's attacker; the battle was fought on A's copy with B's real designs (A won 3 kills to 0). B's copy got the result in turn file 7 ("battle at (9,6): their unit 32 attacked your unit 0. Theirs: 44HP 141HP 157HP Yours: 0HP 0HP 0HP"), B's unit was gone, and after 9 rounds both copies showed the same bases, units and OKE HP (mirrored).
+- **Restart**: B was closed in the middle of the game and started again; it booted Europa, pressed End Turn once, loaded the newest turn file and the game went on.
+- The first run found one real problem: the waiting copy was frozen (no window updates, debug server silent). Fixed below.
+
+### Waiting without freezing: built (2026-11-23, step 6a)
+The waiting copy no longer pauses inside End Turn. At the swap point the hook sends my turn file and looks for the opponent's. If it is not there yet, the hook keeps the game running: it "calls" the game's own VSync (`0x800AC734`, PsyQ `VSync(0)`: wait one frame) with itself as the return address, checks for the file twice a second, and loops. The registers End Turn had when it called the hook are kept and put back when the file has been loaded, so End Turn carries on exactly as before. Meanwhile the window responds, the game shows "Waiting for player X's turn (turn file N)..." on the status line at the bottom, and the debug server answers.
+
+What this does not do yet: the player still has to keep the game open until the opponent has played. The next step (with storage) is to let the player close the game after sending, and have the launcher tell them when it is their turn; starting the game then catches up automatically (the restart test above shows that part already works).
 
 Known gaps:
-- The waiting copy is paused inside End Turn, so its window does not respond until the file arrives. Fine for testing; for real play, step 6 should do the waiting in the launcher (or let the game run while it polls).
-- Research/negotiation (still unmapped) is not in the file; each copy keeps its own.
+- Research/negotiation (still unmapped) is not in the file; each copy keeps its own. The CPU's research still spends the waiting side's funds on every End Turn (up to about 80000 a turn in the tests); hot-seat puts them back, so it does no harm, but it is wasted work.
 - Hot-seat's gaps still apply (kills of the other side's OKEs go to the CPU card records).
 - Each copy uses its own save for its own designs; there is no check that both started the same scenario.
+- The "waiting" status line was not seen on screen in the test (headless copies draw no window); the log lines were.
+
+### Turn-file storage: to choose (step 6b)
+The shared folder has to be replaced by something on the internet. Two choices (the same one will be used for Share Data):
+- **A small relay** (recommended): a tiny web service (for example a free Cloudflare Worker with storage) that keeps turn files under a game code. Players type or share a short code; no accounts. It works the same from Windows, Linux and Android, it can list shared designs for Share Data, and it could send push notifications later. Cost: the project owner sets up one free account once and the relay is code that has to be kept running (very small).
+- **GitHub sign-in in the launcher**: each player signs in with GitHub (a one-time code shown in the launcher) and turn files go into a private repository both players can write to (or one player's, with the other invited). No server to run. But every player needs a GitHub account and has to accept an invitation for each game, and sharing with strangers (Share Data) needs a public repository or Issues.
 
 ### Saves and memory cards: mapped (2026-11-22)
 A campaign save is one 5-block file whose body is a straight copy of the campaign tables in RAM (cards, units, bases, OKEs, globals). No checksum found. A single design is one 1152-byte record at a known offset. See VS_MODE_AND_SAVES.md.
@@ -108,7 +124,7 @@ A campaign save is one 5-block file whose body is a straight copy of the campaig
 
 ### Other parts
 - **Notifications**: no push server at first. The Android app checks for new turn files in the background (about every 15 minutes) and posts a local notification. Desktop checks when the launcher opens.
-- **Storage** of turn files: same open question as Share Data in the launcher plan (GitHub sign-in in the launcher, or a small relay).
+- **Storage** of turn files: see "Turn-file storage: to choose" above.
 
 ## Option A: Live VS over the internet (later)
 PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card becomes the match's slot-2 card. Both players open VS mode and watch the same battle.
@@ -124,7 +140,21 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 2. ~~Map VS mode and saves; build and test remote-player battles~~ (done 2026-11-22, `src/remote_battle.c`).
 3. ~~Map the player order screens (including re-orders) and factory data~~ (done 2026-11-22).
 4. ~~Local hot-seat test on one machine: end turn, swap sides, play the other side~~ (done 2026-11-22, `src/hotseat.c`).
-5. ~~Turn files: capture orders and battle results on one copy, apply them on a second copy~~ (done 2026-11-22 in the simulator, `src/turn_files.c`; real-game test next).
-6. Storage (replace the shared folder), waiting in the launcher instead of inside End Turn, then notifications (desktop, then Android).
+5. ~~Turn files: capture orders and battle results on one copy, apply them on a second copy~~ (done 2026-11-22, `src/turn_files.c`; tested in the real game 2026-11-23).
+6. ~~Waiting without freezing the game~~ (done 2026-11-23). Then storage (replace the shared folder; choice pending), closing the game after sending and catching up on start, then notifications (desktop: when the launcher opens; Android later).
 7. Optional: visual replay of the enemy's turn from the orders in the file.
 8. Later: Options A and B (the card and save layout they need is now mapped).
+
+## Session status (chat B, 2026-11-23)
+**Done**
+- Real two-copy turn-file test: capture game, battle game and restart all worked; no desyncs.
+- Fixed the frozen waiting copy: it now keeps running and shows a "waiting" line until the opponent's file arrives (`src/hotseat.c`, `src/turn_files.c`; simulator updated to check it).
+- Test helpers: `boot_europa.py`, `un7z.py` now unpacks archives with a compressed header; the demo instructions cover Release builds (`PSX_DEBUG_SERVER=1`) and separate memory cards per copy.
+
+**Next**
+- Build turn-file storage once the owner has chosen (relay recommended).
+- Let the player close the game after sending; on start, catch up automatically instead of needing one End Turn.
+- Launcher: "It's your turn" check when the launcher opens (changes on this branch; chat A owns `launcher/`).
+
+**Blocked**
+- Storage choice (relay or GitHub sign-in) is waiting for the project owner.

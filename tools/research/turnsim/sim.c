@@ -13,7 +13,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "cpu_state.h"
+static long g_frames_waited;
 
 #define GP_TURN         0x800DF37Cu
 #define GP_TURN2        0x800DF380u
@@ -104,8 +106,25 @@ void ch_remote_lle_func_8001B8EC(CPUState *c)
     ww(GP_FUNDS_CPU, rw(GP_FUNDS_CPU) - 7);
     for (int b = 0; b < 2; b++) ww(B(b) + 12, rw(B(b) + 12) + 10);
     print_side("PRE", 1);
-    c->pc = 0; func_8008A2B8(c);
+    /* The swap-point hook keeps the game running while it waits: it "calls"
+     * VSync (0x800AC734) with itself as the return address. Play that out:
+     * one frame, then back into the hook, until it returns to End Turn with
+     * the registers End Turn called it with. */
+    c->pc = 0; c->gpr[16] = 0x5150; c->gpr[31] = 0x8001BAAA;
+    func_8008A2B8(c);
+    for (int frames = 0; c->pc == 0x800AC734u; frames++) {
+        if (c->gpr[31] != 0x8008A2B8u) { fprintf(stderr, "SIM: wait loop lost its way back\n"); exit(2); }
+        c->gpr[16] = 0xDEAD;            /* VSync may use any register */
+        struct timespec ts = { 0, 1000000L }; nanosleep(&ts, NULL);
+        c->pc = 0x8008A2B8u;            /* VSync returns to the hook's entry */
+        func_8008A2B8(c);
+        g_frames_waited = frames + 1;
+    }
+    if (c->gpr[16] != 0x5150 || c->gpr[31] != 0x8001BAAA) {
+        fprintf(stderr, "SIM: registers not put back after waiting\n"); exit(2);
+    }
 }
+void host_osd_set_status(const char *msg) { (void)msg; }
 void ch_remote_lle_func_8001C268(CPUState *c) { (void)c; g_cpu_ai_ran++; }
 void ch_remote_lle_func_8001BCB0(CPUState *c) { (void)c; }
 void ch_remote_lle_func_8008A2B8(CPUState *c) { (void)c; }
@@ -193,6 +212,6 @@ int main(int argc, char **argv)
         print_side("POST", 0);
         if (rw(GP_FUNDS_PLAYER) == 0) break;
     }
-    printf("END %c cpu_ai_ran=%d wrong_mover=%d\n", "AB"[role], g_cpu_ai_ran, g_wrong_mover);
+    printf("END %c cpu_ai_ran=%d wrong_mover=%d frames_waited_last=%ld\n", "AB"[role], g_cpu_ai_ran, g_wrong_mover, g_frames_waited);
     return (g_cpu_ai_ran || g_wrong_mover) ? 3 : 0;
 }

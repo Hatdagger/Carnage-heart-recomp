@@ -15,7 +15,8 @@
  *      owner bytes 1 <-> 2 in units, bases and OKEs, the two funds swapped),
  *      together with my design cards, the orders I gave this turn and the
  *      results of the battles I fought.
- *   2. WAIT for the opponent's next turn file to appear.
+ *   2. WAIT for the opponent's next turn file to appear. The game keeps
+ *      running meanwhile (see "waiting" below), so the window responds.
  *   3. LOAD it: its tables are written straight into RAM (they are already
  *      in my point of view), its design cards become "the other side's
  *      designs" for my next battles, and the turn counters are set.
@@ -74,11 +75,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <time.h>
-#endif
 #include "cpu_state.h"
 
 #define GP_TURN         0x800DF37Cu
@@ -149,16 +145,6 @@ int ch_turns_active(void)
 }
 
 /* ---- little helpers ---------------------------------------------------- */
-
-static void sleep_ms(int ms)
-{
-#ifdef _WIN32
-    Sleep((DWORD)ms);
-#else
-    struct timespec ts = { ms / 1000, (long)(ms % 1000) * 1000000L };
-    nanosleep(&ts, NULL);
-#endif
-}
 
 static uint64_t fnv1a(const uint8_t *p, size_t n)
 {
@@ -483,26 +469,46 @@ static int load_file(CPUState *cpu, uint32_t seq, uint32_t len)
     return h[7] & 1;
 }
 
-static int wait_and_load(CPUState *cpu, uint32_t seq)
+/* ---- waiting for the opponent's file ----------------------------------
+ *
+ * The game is not paused while it waits. hotseat.c's swap-point hook calls
+ * ch_turns_swap_point() once; if the opponent's file is not there yet, it
+ * keeps the game running by calling the game's own VSync (one frame) in a
+ * loop and asks ch_turns_poll() after each one, until the file arrives. So
+ * the window keeps responding (and the debug server keeps answering), and
+ * the game shows a "waiting" line on screen meanwhile. */
+
+static uint32_t g_want;           /* the turn file I am waiting for */
+static uint32_t g_polls;
+
+static void set_waiting_status(int on)
 {
-    uint32_t len;
-    int waited = 0;
-    fprintf(stderr, "[turns] waiting for turn file %u from player %c\n",
-            (unsigned)seq, seq & 1u ? 'A' : 'B');
-    /* The game is paused here until the file arrives. */
-    while ((len = read_file(seq)) == 0) {
-        sleep_ms(500);
-        if (++waited % 60 == 0)
-            fprintf(stderr, "[turns] still waiting for turn file %u\n", (unsigned)seq);
-    }
-    return load_file(cpu, seq, len);
+    extern void host_osd_set_status(const char *msg);
+    char msg[96];
+    if (on)
+        snprintf(msg, sizeof msg, "Waiting for player %c's turn (turn file %u)...",
+                 g_want & 1u ? 'A' : 'B', (unsigned)g_want);
+    host_osd_set_status(on ? msg : "");
+}
+
+static int finish_load(CPUState *cpu, uint32_t len)
+{
+    const int over = load_file(cpu, g_want, len);
+    set_waiting_status(0);
+    g_next_send = g_want + 1;
+    g_synced = 1;
+    g_receive_only = 0;
+    capture_start(cpu);
+    if (over) g_synced = 0;
+    return over;
 }
 
 /* Where hot-seat would swap the sides. The waiting side has been put back.
- * Returns 1 if the game is over (no swap and no more turns). */
+ * Returns 1 if the game is over (no swap and no more turns), 0 if the
+ * opponent's turn has been loaded, or -1 if it has not arrived yet: then
+ * call ch_turns_poll() once a frame until it returns 0 or 1. */
 int ch_turns_swap_point(CPUState *cpu, int game_over)
 {
-    uint32_t want;
     if (g_held) {
         const uint32_t units = cpu->read_word(PTR_UNIT_TABLE);
         for (int i = 0; i < 32; i++) cpu->write_byte(units + i * UNIT_SIZE, g_held_owner[i]);
@@ -510,20 +516,35 @@ int ch_turns_swap_point(CPUState *cpu, int game_over)
     }
     if (g_receive_only) {
         /* Catch up: the opponent's turn after my newest one. */
-        want = latest_seq(1) + 1;
+        g_want = latest_seq(1) + 1;
     } else {
         send_file(cpu, game_over);
         if (game_over) {
             g_synced = 0;
             return 1;
         }
-        want = g_next_send + 1;
+        g_want = g_next_send + 1;
     }
-    const int over = wait_and_load(cpu, want);
-    g_next_send = want + 1;
-    g_synced = 1;
-    g_receive_only = 0;
-    capture_start(cpu);
-    if (over) g_synced = 0;
-    return over;
+    const uint32_t len = read_file(g_want);
+    if (len)
+        return finish_load(cpu, len);
+    fprintf(stderr, "[turns] waiting for turn file %u from player %c (the game keeps running)\n",
+            (unsigned)g_want, g_want & 1u ? 'A' : 'B');
+    set_waiting_status(1);
+    g_polls = 0;
+    return -1;
+}
+
+/* Called once a frame while waiting. Looks for the file twice a second. */
+int ch_turns_poll(CPUState *cpu)
+{
+    if (++g_polls % 30u != 0)
+        return -1;
+    if (!seq_exists(g_want)) {
+        if (g_polls % (30u * 120u) == 0)
+            fprintf(stderr, "[turns] still waiting for turn file %u\n", (unsigned)g_want);
+        return -1;
+    }
+    const uint32_t len = read_file(g_want);
+    return len ? finish_load(cpu, len) : -1;
 }

@@ -5,6 +5,7 @@
 typedef struct CPUState {
     uint32_t gpr[32];
     uint32_t pc;
+    uint32_t hi, lo;
     uint32_t (*read_word)(uint32_t addr);
     void     (*write_word)(uint32_t addr, uint32_t value);
     uint16_t (*read_half)(uint32_t addr);

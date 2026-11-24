@@ -96,3 +96,4 @@ starvation_dump.jsonl
 *.apk
 *.apk.idsig
 *.keystore
+/build-appimage/

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Carnage Heart Recompiled
+Comment=Carnage Heart (PS1) rebuilt from your own disc
+Exec=AppRun
+Icon=carnageheart
+Categories=Game;StrategyGame;
+Terminal=false

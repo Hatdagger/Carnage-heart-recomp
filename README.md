@@ -83,6 +83,16 @@ Once the game is installed, the launcher shows **BUILD ANDROID APP**. It opens a
   <img src="docs/screenshots/launcher-build-android-app.png" alt="Launcher main menu with BUILD ANDROID APP selected" width="400">
 </p>
 
+## Play on Steam Deck (or any Linux) with the AppImage
+
+1. Download `CarnageHeart_Recompiled-<version>-x86_64.AppImage` from [Releases](https://github.com/Hatdagger/Carnage-heart-recomp/releases) in Desktop Mode, and put it in a folder of its own (for example `~/Games`).
+2. Put your own Carnage Heart (USA) Redump dump (the `.cue` and its `.bin` tracks) in the same folder.
+3. Double-click the AppImage. If it doesn't start, right-click it > Properties > Permissions and tick "Is executable".
+4. The first start installs the game into a `CarnageHeart` folder beside the AppImage and builds it from your disc. This takes a while on the Deck. After that, the launcher opens straight away.
+5. For Game Mode: in Steam, *Add a Non-Steam Game* and pick the AppImage. The launcher and the game work with the Deck's controls.
+
+Your saves, settings and memory cards live in that `CarnageHeart` folder. Updates come through the launcher's **UPDATE** page; a newer AppImage also updates the folder, keeping your saves and settings.
+
 ## Build from your own disc (developers)
 
 You need your own Redump dump of Carnage Heart (USA): the `.cue` and all three `.bin` tracks.

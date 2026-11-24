@@ -271,9 +271,9 @@ jobs:
           import subprocess
           subprocess.run([str(tc / "cmake"), "--build", str(root / "build-deck"), "--target", "psx-runtime"], check=True)
           PY
-          SDL_DIR="$(grep '^SDL3_DIR' build-deck/CMakeCache.txt | cut -d= -f2-)"
-          echo "SDL3_DIR=${SDL_DIR}"
-          case "${SDL_DIR}" in */deps/lib/cmake/SDL3) ;; *) echo "::error::did not use the pack's SDL3"; exit 1 ;; esac
+          # Linked against the pack's prebuilt SDL3, not one built from source.
+          grep -q 'deps/lib/libSDL3.a' build-deck/build.ninja || { echo "::error::did not use the pack's SDL3"; exit 1; }
+          test ! -d build-deck/_deps/sdl3-build || { echo "::error::SDL3 was built from source"; exit 1; }
           EXE=build-deck/CarnageHeart_Recompiled
           test -x "${EXE}"
           grep -qa 'libX11.so.6' "${EXE}" || { echo "::error::SDL has no X11 video driver"; exit 1; }

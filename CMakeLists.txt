@@ -138,6 +138,27 @@ psxrecomp_select_guest_implementation(
     REFERENCE_PREFIX ch_mouse_lle_
     SNAPSHOT_TAG 0x43484D31)
 endif()
+# Remote-player battles (multiplayer groundwork, off by default): campaign
+# battles against another player's designs, fought the way VS mode does.
+# Run-time switches are described in src/remote_battle.c, src/hotseat.c,
+# src/turn_files.c and
+# docs/research/VS_MODE_AND_SAVES.md.
+option(CH_REMOTE_BATTLE "Remote-player battle support (multiplayer groundwork)" OFF)
+if(CH_REMOTE_BATTLE AND _ch_game_shards AND NOT PSXRECOMP_FORCE_SETUP_HOST)
+psxrecomp_select_guest_implementation(
+    NAME ch_remote IMPLEMENTATION HLE
+    TARGETS ${_ch_mouse_targets}
+    GENERATED_SOURCES ${_ch_game_shards}
+    SYMBOLS func_8001CF48 func_80035CD4 func_80035988
+            func_8001B8EC func_8001C268 func_8001BCB0 func_8008A2B8
+            func_800333F8
+    HLE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/remote_battle.c"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/hotseat.c"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/turn_files.c"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/turn_relay.c"
+    REFERENCE_PREFIX ch_remote_lle_
+    SNAPSHOT_TAG 0x43485243)
+endif()
 # Test-only: -DCH_MOUSE_SELFTEST=ON drives a fake mouse from a file (see src/mouse_pad_hle.c).
 option(CH_MOUSE_SELFTEST "Fake PS1 Mouse from CH_MOUSE_SELFTEST_FILE (testing only)" OFF)
 if(CH_MOUSE_SELFTEST)

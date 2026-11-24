@@ -23,11 +23,14 @@
  * request_mod_commit_launch().
  */
 
-/* ch_update.h is included at the top of the file (see the cmake module). */
+/* ch_update.h and ch_online.h are included at the top of the file (see the
+ * cmake module). */
 
 namespace ch_menu {
 
-enum Page { PAGE_MAIN = 0, PAGE_ONLINE, PAGE_SHARE, PAGE_UPDATE, PAGE_SETTINGS, PAGE__COUNT };
+enum Page { PAGE_MAIN = 0, PAGE_ONLINE, PAGE_SHARE, PAGE_UPDATE, PAGE_SETTINGS,
+            PAGE_CAMPAIGN, PAGE_CGAME, PAGE_JOIN,   /* ch_online_menu.inc */
+            PAGE__COUNT };
 
 struct State {
     int    cursor[PAGE__COUNT] = {0};
@@ -329,16 +332,21 @@ static int list_page(const Gfx& g, const Input& in, Page page, const char* title
     return activate;
 }
 
+/* ONLINE CAMPAIGN pages: the player's online games, create and join. */
+#include "ch_online_menu.inc"
+
 /* ---- ONLINE PLAY ----------------------------------------------------------------- */
 
 static void draw_online_page(LauncherModel* m, const Gfx& g, const Input& in) {
     const bool net = m->netplay_supported;
+    const bool camp = ch_online::built_in(nullptr);
+    const char* camp_badge = !camp ? "SOON" : ch_online::your_turn_count() ? "YOUR TURN" : "";
     const Item items[] = {
         { "VERSUS", net ? "" : "SOON", net,
           "Two players, two OKE teams, one battle: over your own network (LAN) or "
           "online through a room. The host is player 1, the guest is player 2 "
           "and brings their own memory card." },
-        { "ONLINE CAMPAIGN", "SOON", false,
+        { "ONLINE CAMPAIGN", camp_badge, camp,
           "Both players share one campaign map and take turns. On your turn you "
           "build, program and deploy OKEs; then the other player is told it is "
           "their turn. Battles are fought by the programs you wrote." },
@@ -348,6 +356,7 @@ static void draw_online_page(LauncherModel* m, const Gfx& g, const Input& in) {
                               items, 2, "ABOUT", &back);
     if (in.back || back) { open_page(PAGE_MAIN); return; }
     if (act == 0 && net) launcher_model_set_view(m, LNG_VIEW_NETPLAY_MODE);
+    if (act == 1 && camp) { online_ui::check_soon(); open_page(PAGE_CAMPAIGN); }
 }
 
 /* ---- SHARE DATA ------------------------------------------------------------------ */
@@ -508,6 +517,7 @@ static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
         const char* badge = nullptr;
         if (entries[i].id == MAIN_UPDATE && update_live(upd)) badge = "NEW";
         if (entries[i].id == MAIN_UPDATE && upd.state == ch_update::State::Done) badge = "RESTART";
+        if (entries[i].id == MAIN_ONLINE && ch_online::your_turn_count()) badge = "YOUR TURN";
         const RowHit h = row(g, 25.0f, 90.0f + kRowH * i, 268.0f, i == cur, true,
                              entries[i].label, badge, false, false);
         if (h.hovered && mouse_moved()) cur = i;
@@ -515,6 +525,10 @@ static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
     }
     if (in.confirm) activate = cur;
     if (in.start) activate = 0;
+    /* Whose turn is it in the player's online games? Asked once when the
+     * launcher opens (only if there are online games). */
+    static bool online_checked = false;
+    if (!online_checked && !m->in_session) { online_checked = true; ch_online::refresh(); }
 
     /* Status. */
     panel(g, 310.0f, 76.0f, 306.0f, 150.0f, "STATUS");
@@ -546,6 +560,15 @@ static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
         else
             std::snprintf(buf, sizeof buf, "%s", upd.current == "dev" ? "DEVELOPMENT" : upd.current.c_str());
         text(g, 424.0f, y, 11.0f, update_live(upd) || upd.state == ch_update::State::Done ? kHi : kText, buf);
+        const int turns = ch_online::your_turn_count();
+        const size_t games = ch_online::snapshot().games.size();
+        if (games && !m->in_session) {
+            y += 19.0f;
+            text(g, 324.0f, y, 11.0f, kDim, "ONLINE");
+            if (turns) std::snprintf(buf, sizeof buf, "YOUR TURN IN %d GAME%s", turns, turns > 1 ? "S" : "");
+            else std::snprintf(buf, sizeof buf, "%u GAME%s, NOT YOUR TURN", (unsigned)games, games > 1 ? "S" : "");
+            text(g, 424.0f, y, 11.0f, turns ? kHi : kText, buf);
+        }
     }
 
     panel(g, 310.0f, 242.0f, 306.0f, 174.0f, "INFO");
@@ -738,6 +761,9 @@ static void draw(LauncherModel* m, const LauncherTheme&) {
             case PAGE_ONLINE: draw_online_page(m, g, in); break;
             case PAGE_SHARE:  draw_share_page(m, g, in); break;
             case PAGE_UPDATE: draw_update_page(m, g, in); break;
+            case PAGE_CAMPAIGN: draw_campaign_page(m, g, in); break;
+            case PAGE_CGAME:  draw_cgame_page(m, g, in); break;
+            case PAGE_JOIN:   draw_join_page(m, g, in); break;
             default:          draw_main(m, g, in); break;
         }
     }

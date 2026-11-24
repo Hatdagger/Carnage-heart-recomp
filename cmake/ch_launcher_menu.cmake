@@ -43,9 +43,10 @@ function(ch_add_launcher_menu TGT)
     endforeach()
 
     # The menu lands inside the file's anonymous namespace; a C++ header
-    # included there would declare its functions in it, so ch_update.h goes
-    # at the very top.
+    # included there would declare its functions in it, so ch_update.h and
+    # ch_online.h go at the very top.
     string(PREPEND _txt "#include \"ch_update.h\"   /* Carnage Heart launcher menu */\n")
+    string(PREPEND _txt "#include \"ch_online.h\"   /* Carnage Heart online campaign */\n")
     string(REPLACE "${_a1}"
         "/* Carnage Heart launcher menu (cmake/ch_launcher_menu.cmake). */\n#include \"ch_menu.inc\"\n\n${_a1}"
         _txt "${_txt}")
@@ -83,5 +84,17 @@ function(ch_add_launcher_menu TGT)
     # Only this file carries the version, so a version bump rebuilds one TU.
     set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/launcher/ch_update.cpp"
         PROPERTIES COMPILE_DEFINITIONS "CH_VERSION=\"${_ch_version}\"")
+    # Online campaign games (launcher/ch_online.cpp): on when the game has
+    # turn files (CH_REMOTE_BATTLE). CH_TURN_RELAY_URL builds in the relay
+    # address (the project's own relay by default, set up 2026-11-24);
+    # online-turns/relay.txt beside the game or CH_TURN_RELAY overrides it.
+    set(CH_TURN_RELAY_URL "https://ch-turns.surreal64.workers.dev" CACHE STRING "Turn relay address built into the launcher (relay/README.md)")
+    set(_ch_online "${CMAKE_CURRENT_SOURCE_DIR}/launcher/ch_online.cpp")
+    target_sources(${TGT} PRIVATE "${_ch_online}")
+    set(_ch_online_defs "CH_TURN_RELAY_DEFAULT=\"${CH_TURN_RELAY_URL}\"")
+    if(CH_REMOTE_BATTLE)
+        list(APPEND _ch_online_defs "CH_ONLINE_CAMPAIGN=1")
+    endif()
+    set_source_files_properties("${_ch_online}" PROPERTIES COMPILE_DEFINITIONS "${_ch_online_defs}")
     message(STATUS "Carnage Heart menu: on (version ${_ch_version})")
 endfunction()

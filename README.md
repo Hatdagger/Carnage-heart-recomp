@@ -50,7 +50,7 @@ This repository contains **no game data and no recompiled game code**. You gener
 
 Which buttons each menu screen uses comes from a scan of the game's code (`tools/scan_screens.py`, table in `src/screen_labels.c`), checked in the game. In battles the menu offers **L2: NEXT OKE** (camera to the next OKE), **SETTINGS** (display, speed and camera) and **OKE STATUS** (test battles) or **NEXT OKE** (other battles). As in *Carnage Heart EZ*, while you use the mouse a battle takes left click for OKE status / next OKE and double right click for settings, in place of Start and Select. Any other screen shows the full list.
 
-While you use the mouse, the game also switches on the mouse layout that *Carnage Heart EZ* used and the USA release left switched off: menus show the game's own arrow cursor and stop jumping between items, and the base screen's minimap becomes clickable (pointing marks the hex under the cursor, the round arrows turn the view, **MAP** opens the full map). Press a pad button and the pad layout comes back.
+While you use the mouse, the game also switches on the mouse layout that *Carnage Heart EZ* used and the USA release left switched off: menus stop jumping between items, and the base screen's minimap becomes clickable (pointing marks the hex under the cursor, the round arrows turn the view, **MAP** opens the full map). The game's own arrow cursor is hidden while you use the mouse or touch screen (your normal pointer already shows where you are); it comes back with a pad or a real PS1 Mouse. Press a pad button and the pad layout comes back.
 
 <p align="center">
   <img src="docs/screenshots/base-minimap-pointer.png" alt="Base screen: pointing at the minimap highlights the hex under the cursor" width="400">

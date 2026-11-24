@@ -18,7 +18,7 @@ public class GameActivity extends SDLActivity {
 
     private String scale() {
         String s = getIntent() != null ? getIntent().getStringExtra(EXTRA_SCALE) : null;
-        return ("2x".equals(s) || "3x".equals(s)) ? s : "4x";
+        return ("2x".equals(s) || "4x".equals(s)) ? s : "3x";
     }
 
     private String renderer() {

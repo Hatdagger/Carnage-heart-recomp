@@ -173,7 +173,9 @@ int SDL_main(int argc, char *argv[])
      * Without the GPU features it needs, OpenGL becomes software here. */
     /* "--android-scale 2x|3x|4x" from the start screen's SHARPNESS button
      * (GPU renderer only). Removed here: the runtime doesn't know it. */
-    const char *scale = "4x";
+    /* Default 3x: test 7 (24 Nov) ran smooth at 3x on the Y700 Gen 2 and the
+     * owner chose it as the default. */
+    const char *scale = "3x";
     for (int i = 1; i + 1 < argc; i++) {
         if (!strcmp(args[i], "--android-scale")) {
             const char *v = args[i + 1];

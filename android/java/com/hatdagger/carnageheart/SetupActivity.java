@@ -463,13 +463,13 @@ public class SetupActivity extends Activity {
     static final String PREF_SCALE = "gpu_scale";
 
     private String scale() {
-        String s = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_SCALE, "4x");
-        return ("2x".equals(s) || "3x".equals(s)) ? s : "4x";
+        String s = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_SCALE, "3x");
+        return ("2x".equals(s) || "4x".equals(s)) ? s : "3x";
     }
 
     private void updateScaleButton() {
         String s = scale();
-        String what = "4x".equals(s) ? "sharpest" : "3x".equals(s) ? "lighter" : "lightest";
+        String what = "4x".equals(s) ? "sharpest" : "3x".equals(s) ? "default" : "lightest";
         scaleButton.setText("SHARPNESS: " + s + " (" + what + ") - tap to change");
     }
 

@@ -1,4 +1,4 @@
-/* Carnage Heart: window pointer, touch and right-click button menu.
+/* Carnage Heart: window pointer, touch and middle-click button menu.
  *
  * The game has a mouse cursor (restored from Carnage Heart EZ in
  * mouse_pad_hle.c), but a PS1 Mouse on port 1 only gives two buttons and
@@ -7,17 +7,17 @@
  * mouse_pad_hle.c ORs into the normal pad word:
  *
  *   Left click            Cross (confirm) on the item under the pointer
- *   Right click           opens a small labelled menu at the pointer with the
+ *   Right click           Circle (back), as on the PS1 Mouse in Carnage
+ *                         Heart EZ. Closes the menu instead if it is open.
+ *   Middle click          opens a small labelled menu at the pointer with the
  *                         buttons a mouse lacks. On a known menu screen it
  *                         lists only the buttons that do something there, with
  *                         what they do ("SELECT: QUIT GAME"), plus MORE BUTTONS
  *                         for the full list; elsewhere it lists Triangle,
  *                         Square, Start, Select, L1, R1, L2, R2. Back is always
  *                         last. Clicking an entry presses that button on the
- *                         item you right-clicked. Clicking anywhere else closes
- *                         the menu.
- *   Double right click    Circle (back). The menu opens on the first click and
- *                         closes again on the second, so there is no delay.
+ *                         item you middle-clicked. Clicking anywhere else, or
+ *                         middle-clicking again, closes the menu.
  *   Mouse wheel           on the chip program grid: scroll the grid (R1 held
  *                         with the D-pad, as on the pad); Shift + wheel or a
  *                         sideways wheel / touchpad swipe scrolls left-right.
@@ -109,7 +109,6 @@ static const MenuItem k_back = { "BACK", B_CIRCLE, K_BACK };
 #define MAX_W    (PAD * 2 + MAX_COLS * FONT_W)
 #define MAX_H    (PAD * 2 + MAX_ITEMS * ROW_H)
 
-#define DOUBLE_CLICK_MS 350u
 #define LONG_PRESS_MS   500u
 #define TAP_SLOP_PX     14.0f
 #define PRESS_FRAMES    3               /* how long a fired button is held */
@@ -161,7 +160,6 @@ static uint32_t   s_fire_bits; static int s_fire_frames;
 static int        s_menu_open;
 static float      s_menu_x, s_menu_y;   /* window coords of the menu's corner */
 static float      s_anchor_x, s_anchor_y; /* pointer where it was opened */
-static Uint64     s_last_right_ms;
 static int        s_menu_scale = 1;     /* set by the draw callback */
 static float      s_pixel_density = 1.0f;
 static SDL_AtomicInt s_draws;
@@ -271,13 +269,18 @@ static void primary_press(float x, float y) {
     s_left_held = 1; s_left_latch = 1; s_activity = 1;
 }
 
-static void secondary_press(float x, float y, Uint64 ms) {
-    const int dbl = s_menu_open && ms - s_last_right_ms <= DOUBLE_CLICK_MS;
-    s_last_right_ms = ms;
-    if (dbl) { s_menu_open = 0; fire(B_CIRCLE); s_last_right_ms = 0; return; }
-    s_left_held = 0;
+/* Right click: Circle (back), or close the menu if it is open. */
+static void back_press(void) {
+    s_left_held = 0; s_activity = 1;
+    if (s_menu_open) { s_menu_open = 0; return; }
+    fire(B_CIRCLE);
+}
+
+/* Middle click: open the button menu at the pointer (again closes it). */
+static void menu_press(float x, float y) {
+    s_left_held = 0; s_activity = 1;
+    if (s_menu_open) { s_menu_open = 0; return; }
     menu_open_at(x, y);
-    s_activity = 1;
 }
 
 static int ignore_input(void) {
@@ -303,7 +306,9 @@ static bool SDLCALL watch(void *ud, SDL_Event *ev) {
         if (ev->button.button == SDL_BUTTON_LEFT) {
             if (down) primary_press(s_px, s_py); else s_left_held = 0;
         } else if (ev->button.button == SDL_BUTTON_RIGHT && down) {
-            secondary_press(s_px, s_py, ms);
+            back_press();
+        } else if (ev->button.button == SDL_BUTTON_MIDDLE && down) {
+            menu_press(s_px, s_py);
         }
         break;
     }
@@ -663,9 +668,11 @@ static void selftest_step(void) {
     e.common.timestamp = SDL_GetTicksNS();
     if (!strcmp(cmd, "wait")) { wait = (int)a; return; }
     if (!strcmp(cmd, "move")) { e.type = SDL_EVENT_MOUSE_MOTION; e.motion.windowID = s_win; e.motion.x = a; e.motion.y = b; }
-    else if (!strcmp(cmd, "ldown") || !strcmp(cmd, "lup") || !strcmp(cmd, "rdown") || !strcmp(cmd, "rup")) {
+    else if (!strcmp(cmd, "ldown") || !strcmp(cmd, "lup") || !strcmp(cmd, "rdown") || !strcmp(cmd, "rup") ||
+             !strcmp(cmd, "mdown") || !strcmp(cmd, "mup")) {
         e.type = cmd[1] == 'd' ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-        e.button.windowID = s_win; e.button.button = cmd[0] == 'l' ? SDL_BUTTON_LEFT : SDL_BUTTON_RIGHT;
+        e.button.windowID = s_win;
+        e.button.button = cmd[0] == 'l' ? SDL_BUTTON_LEFT : cmd[0] == 'm' ? SDL_BUTTON_MIDDLE : SDL_BUTTON_RIGHT;
         e.button.down = cmd[1] == 'd'; e.button.x = s_px; e.button.y = s_py; e.button.clicks = 1;
     } else if (!strcmp(cmd, "wheel")) {
         e.type = SDL_EVENT_MOUSE_WHEEL; e.wheel.windowID = s_win; e.wheel.which = 1;

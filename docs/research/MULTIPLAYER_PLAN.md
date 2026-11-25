@@ -168,7 +168,7 @@ Why "switch off" rather than "refuse to start": the map is already open when the
 **Tested**: simulator (`turnsim/run.sh`, two new cases: a copy started on Europa against a Europa (Practice) game loads and sends nothing; a new game started on Ganymede writes no turn file); the real two-copy online test (`online_demo.py`) still plays through to victory/defeat with no desyncs, and its logs show "map start: Europa (Practice), as in the turn files"; and in the real game, a copy started on Europa against that game's turn files said "Europa started, but this online game is on Europa (Practice)", loaded nothing and wrote no file, and its End Turn ran as a normal campaign. (The bottom line itself is not in headless screenshots; the log shows it was set.)
 
 ### Replay: watch what the opponent did (2026-11-24, session 6, step 7)
-Branch `enemy-replay` (on main after PR #9). When the opponent's turn arrives, their units now walk across the map and **their battles are fought again on screen**, then the turn file's end state is loaded exactly as before. Screenshots: `docs/screenshots/replay-enemy-move.png` (the red enemy unit stepping on the hex map), `docs/screenshots/replay-enemy-battle.png` (the map, then the replayed 3D battle).
+Branch `enemy-replay`, **PR #11** (on main after PR #9). When the opponent's turn arrives, their units now walk across the map and **their battles are fought again on screen**, then the turn file's end state is loaded exactly as before. Screenshots: `docs/screenshots/replay-enemy-move.png` (the red enemy unit stepping on the hex map), `docs/screenshots/replay-enemy-battle.png` (the map, then the replayed 3D battle).
 
 How it works (`src/turn_files.c`, `src/remote_battle.c`, `src/hotseat.c`, new `src/turn_replay.c`):
 - **Turn files are version 3.** Two parts are added at the end of the body: the **start tables** (units, bases, OKEs and funds when the sender pressed End Turn, after their orders and before any unit moved; same layout as the tables, receiver's point of view) and a **random seed for each battle**. About 43 KB a file (was 37 KB). Version 2 files are still read (no replay). Header unchanged, so the launcher and Android app need no change.
@@ -244,14 +244,14 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 - Sandbox notes: libwebp and SDL3 are not vendored and codeload.github.com is blocked; `git fetch` the libwebp pin from github.com and pass `PSX_LIBWEBP_SOURCE_DIR`; `apt-get install libgl-dev libegl-dev libgles-dev libxcursor-dev libxi-dev libxrandr-dev libxss-dev libxfixes-dev libxtst-dev` for SDL3.
 
 **Next**
-- Hub: land branch `enemy-replay` (pushing was refused from this session; the commit is in the handover zip as a git bundle). Release note: both players must update (version-3 turn files).
+- Hub: merge **PR #11** (branch `enemy-replay`). Release note: both players must update (version-3 turn files).
 - Owner: device test on Android (the APK could not be built here: no access to the devkit release).
 - Map Negotiation and research (owner's request through chat A, project doc "Note for Chat B - Negotiation"): not started; `0x8004BBB8` is the End Turn routine (calls `0x8004B9F4`, loops over 6 records at `0x80128040` and the table at `0x800BD0AC`).
 - Small: skip button for the replay; monochrome notification icon.
 - Later: Options A (live VS) and B (card sharing).
 
 **Blocked**
-- Pushing to GitHub from this session (access refused); the hub lands the bundle.
+- Nothing (pushing works again; the branch is on GitHub as PR #11).
 
 ## Session status (chat B, 2026-11-24, session 5)
 **Done**

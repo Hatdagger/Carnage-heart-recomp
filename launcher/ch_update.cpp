@@ -29,6 +29,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -798,7 +799,39 @@ void download_and_apply() {
     start(do_apply);
 }
 
-bool restart_into_rebuild() {
+namespace {
+const char* const kAutoNote = "ch-auto-rebuild.txt";
+
+void write_auto_note(const fs::path& root) {
+    std::ofstream f(root / kAutoNote, std::ios::binary | std::ios::trunc);
+    f << (long long)std::time(nullptr) << "\n"
+      << "Written by the launcher's automatic update: the setup exe starts the\n"
+         "rebuild by itself and then removes this file.\n";
+}
+} /* namespace */
+
+bool take_auto_rebuild_request() {
+    const fs::path root = kit_root();
+    if (root.empty()) return false;
+    const fs::path note = root / kAutoNote;
+    std::error_code ec;
+    if (!fs::is_regular_file(note, ec)) return false;
+    long long when = 0;
+    {
+        std::ifstream f(note, std::ios::binary);
+        f >> when;
+    }
+    fs::remove(note, ec);
+    const long long now = (long long)std::time(nullptr);
+    return when > 0 && now >= when && now - when <= 30 * 60;
+}
+
+bool auto_check_allowed() {
+    const char* v = std::getenv("CH_NO_AUTO_UPDATE");
+    return !(v && v[0] && v[0] != '0');
+}
+
+bool restart_into_rebuild(bool automatic) {
     {
         std::lock_guard<std::mutex> l(g_mu);
         if (g_snap.state != State::Done) return false;
@@ -815,6 +848,7 @@ bool restart_into_rebuild() {
     }
     const fs::path exe = root / kSetupExe;
     if (!fs::is_regular_file(exe, ec)) return false;
+    if (automatic) write_auto_note(root);
 #ifdef _WIN32
     std::wstring cmd = L"\"" + exe.wstring() + L"\"";
     std::vector<wchar_t> buf(cmd.begin(), cmd.end()); buf.push_back(0);

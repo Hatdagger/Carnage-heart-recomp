@@ -47,7 +47,17 @@ void download_and_apply();    /* only after check() found one */
 /* After Done: start the rebuild and return true; the caller then closes the
  * launcher. A quick rebuild opens in its own console window and waits for the
  * launcher to close; otherwise the kit's setup exe starts and regenerates. */
-bool restart_into_rebuild();
+bool restart_into_rebuild(bool automatic = false);
+
+/* Automatic updates (the countdown when the launcher opens, ch_menu.inc).
+ * automatic = true above also leaves a note in the kit folder when the full
+ * rebuild is the one that runs, so the setup exe that starts next does
+ * Generate & rebuild by itself instead of waiting in the setup wizard.
+ * take_auto_rebuild_request() reads and removes that note: true when it was
+ * there and fresh (written in the last 30 minutes). */
+bool take_auto_rebuild_request();
+/* False when the player turned automatic checks off (CH_NO_AUTO_UPDATE=1). */
+bool auto_check_allowed();
 
 /* "Build Android App" (scripts/android, from the Android port): true when
  * the kit has the builder. start_android_build() opens it in its own console

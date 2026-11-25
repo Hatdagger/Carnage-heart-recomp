@@ -77,7 +77,7 @@ If setup fails, open `setup-log.txt` in the same folder as the exe. It records e
 
 ### Android app
 
-Once the game is installed, the launcher shows **BUILD ANDROID APP**. It opens a window that builds `CarnageHeart.apk` from your installed game (the first time it downloads the Android tools once). When it says Finished, copy `CarnageHeart.apk` from the game folder to your phone or tablet.
+Once the game is installed, the launcher shows **BUILD ANDROID APP**. It opens a window that builds `CarnageHeart.apk` from your installed game (the first time it downloads the Android tools once). When it finishes, the launcher shows a QR code: scan it with the tablet's camera (tablet on the same Wi-Fi as the PC) and a page opens where you can download the app and your disc files straight from the PC. The link works only while that screen is open, and **SEND APP TO TABLET** on the main menu shows it again later. If Windows asks about the firewall, allow private networks. You can still copy `CarnageHeart.apk` from the game folder by cable instead.
 
 <p align="center">
   <img src="docs/screenshots/launcher-build-android-app.png" alt="Launcher main menu with BUILD ANDROID APP selected" width="400">

@@ -236,6 +236,9 @@ def main():
     say("=" * 64)
     say("""
 To put it on your tablet or phone:
+ The launcher now shows a QR code: scan it with the tablet's camera (same
+ Wi-Fi as this PC) to download the app and your disc files. SEND APP TO
+ TABLET on the launcher's main menu shows it again. Or by hand:
  1. Copy CarnageHeart.apk to the device (USB cable, Google Drive, etc.),
     together with your disc files (the .cue and the three .bin files).
  2. On the device, tap CarnageHeart.apk to install it. Allow "install

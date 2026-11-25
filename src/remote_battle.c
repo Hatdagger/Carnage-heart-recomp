@@ -62,6 +62,14 @@ int ch_hotseat_active(void);
 const uint8_t *ch_hotseat_other_card(int idx);
 /* Turn files (turn_files.c): record the result for the turn file. */
 void ch_turns_note_battle(CPUState *cpu, uint32_t unit1, uint32_t unit2);
+void ch_turns_battle_starts(void);
+/* The replay of the opponent's turn (turn_files.c, turn_replay.c). */
+int ch_turns_replaying(void);
+const uint8_t *ch_turns_replay_battle(uint32_t mine, uint32_t theirs, uint32_t *seed);
+void ch_turns_replay_result(CPUState *cpu, const uint8_t *record);
+void ch_hotseat_swap_view(CPUState *cpu);
+void ch_rand_set(uint32_t seed);
+static const uint8_t *g_replay_rec; /* a replayed battle: its record; RAM is turned round */
 
 static int g_enabled = -1;
 static int g_fresh = 1;
@@ -141,6 +149,25 @@ void func_80035CD4(CPUState *cpu)
     if (!g_enabled || cpu->pc != 0 || g_active) {
         ch_remote_lle_func_80035CD4(cpu);
         return;
+    }
+
+    /* Turn files: a battle on the sender's device gets a fresh seed; in the
+     * replay of the opponent's turn, their battle is fought again from the
+     * same start: RAM is turned round to their point of view (their unit is
+     * side 1 again, with the same numbers) and the same seed is used. */
+    g_replay_rec = NULL;
+    if (ch_turns_replaying()) {
+        uint32_t seed;
+        const uint8_t *rec = ch_turns_replay_battle(cpu->gpr[4], cpu->gpr[5], &seed);
+        if (rec) {
+            ch_hotseat_swap_view(cpu);
+            cpu->gpr[4] = rec[0];
+            cpu->gpr[5] = rec[1];
+            ch_rand_set(seed);
+            g_replay_rec = rec;
+        }
+    } else {
+        ch_turns_battle_starts();
     }
 
     const uint32_t unit1 = cpu->gpr[4], unit2 = cpu->gpr[5];
@@ -228,7 +255,15 @@ static void finish_remote_battle(CPUState *cpu)
     }
     for (int i = 0; i < g_nborrowed; i++)
         write_block(cpu, cards + g_borrowed[i] * CARD_SIZE, g_saved_card[i], CARD_SIZE);
-    ch_turns_note_battle(cpu, g_unit1, g_unit2);
+    if (g_replay_rec) {
+        /* The recorded result stands, then back to my point of view before
+         * the game's result code runs (with my unit numbers). */
+        ch_turns_replay_result(cpu, g_replay_rec);
+        ch_hotseat_swap_view(cpu);
+        g_replay_rec = NULL;
+    } else {
+        ch_turns_note_battle(cpu, g_unit1, g_unit2);
+    }
     g_active = 0;
 }
 

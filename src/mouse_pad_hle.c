@@ -62,6 +62,40 @@ static uint32_t list_ra, list_seen = 0xFFFFFF00u;
 #define BATTLE_MODE   0x800DF3D0u /* 0 = test battle (Start: status list) */
 #define BATTLE_PADS   0x800DF3D8u /* 2 = two players: L2 / Start don't switch OKE */
 
+/* For the opponent's-turn replay (src/turn_files.c): 1 on a fresh press of
+ * Start, Cross or Circle, or a click / tap. While the replay runs the hook
+ * calls the game's routines directly, so the game's own pad routine (above)
+ * may not run; then the port-1 buffer, which the BIOS fills on every VBlank,
+ * is read here instead, and the window pointer / touch is asked directly.
+ * arm = 1 at the start of the replay: buttons already held (the End Turn
+ * press) don't count until they are let go. */
+#define SKIP_BUTTONS  (0x0800u | 0x0040u | 0x0020u)   /* Start, Cross, Circle */
+int ch_replay_skip_poll(CPUState *cpu, int arm)
+{
+    static uint32_t prev, seen_reads;
+    uint32_t b = 0;
+    if (pad_reads != seen_reads) {
+        seen_reads = pad_reads;                   /* the game read the pad itself */
+        b = cpu->read_word(PAD_BUTTONS);
+    } else {
+        const uint8_t status = cpu->read_byte(PAD1_BUF), type = cpu->read_byte(PAD1_BUF + 1) & 0xF0u;
+        const uint8_t b2 = cpu->read_byte(PAD1_BUF + 2), b3 = cpu->read_byte(PAD1_BUF + 3);
+        if (status == 0 && type == 0x10u)          /* PS1 Mouse: left = Cross, right = Circle */
+            b = ((uint32_t)(uint8_t)(~b3 << 3) & 0x60u);
+        else if (status == 0 && (type == 0x40u || type == 0x50u || type == 0x70u))
+            b = ((((uint32_t)b2 << 8) ^ 0xFF00u) + (uint8_t)~b3) & 0xFFFFu;
+        if (ch_pointer_enabled()) {
+            ChPointerFrame pf;
+            ch_pointer_frame(&pf);
+            b |= pf.buttons;
+        }
+    }
+    b &= SKIP_BUTTONS;
+    const int hit = !arm && (b & ~prev) != 0;
+    prev = b;
+    return hit;
+}
+
 static int32_t ez_signed_x(uint8_t b) { return b < 0x81 ? (int32_t)b : -(int32_t)(uint8_t)~b; }
 static int32_t ez_signed_y(uint8_t b) { return b < 0x81 ? (int32_t)(b >> 1) : -(int32_t)((b >> 1) ^ 0x7F); }
 

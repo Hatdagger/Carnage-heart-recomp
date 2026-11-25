@@ -122,6 +122,8 @@
  * turn file's end state is loaded as before, so the replay can never change
  * the game. After each of their units steps, the replay waits half a second
  * (CH_TURN_REPLAY_PAUSE frames, default 30). CH_TURN_REPLAY=0 turns it off.
+ * Start, Cross or Circle (or a click / tap) skips the rest of the replay:
+ * their remaining units don't move and the end state is loaded at once.
  *
  * The previous-tables hash links the files into a chain: each file says
  * which state it was played from, and the receiver checks that it is the
@@ -704,6 +706,10 @@ static const uint8_t *g_rp_battles, *g_rp_seeds;
 static int g_rp_nbattles;
 static uint8_t g_rp_used[TF_MAX_BATTLES];
 static int g_rp_fought, g_rp_matched;
+static int g_rp_skipped;          /* the player pressed skip */
+/* mouse_pad_hle.c: 1 on a fresh press of Start, Cross or Circle, or a click
+ * or tap (arm = 1: note what is already held, report nothing). */
+extern int ch_replay_skip_poll(CPUState *cpu, int arm);
 
 static int replay_enabled(void)
 {
@@ -763,6 +769,8 @@ static int replay_begin(CPUState *cpu, uint32_t len, uint32_t ret)
     g_rp_nbattles = nbattles;
     memset(g_rp_used, 0, sizeof g_rp_used);
     g_rp_fought = g_rp_matched = 0;
+    g_rp_skipped = 0;
+    ch_replay_skip_poll(cpu, 1);
 
     write_tables(cpu, g_rp_buf + off);
     /* Their designs, for the battles (remote_battle.c turns RAM round to
@@ -776,7 +784,8 @@ static int replay_begin(CPUState *cpu, uint32_t len, uint32_t ret)
     g_rp_active = 1;
 
     char msg[128];
-    snprintf(msg, sizeof msg, "Player %c's turn: watching what they did...", g_role ? 'A' : 'B');
+    snprintf(msg, sizeof msg, "Player %c's turn: watching what they did... (X, O or Start: skip)",
+             g_role ? 'A' : 'B');
     host_osd_set_status(msg);
     fprintf(stderr, "[turns] replay of turn file %u: %d unit(s), %d battle(s)\n",
             (unsigned)get32(g_rp_buf + 8), moving, nbattles);
@@ -789,6 +798,19 @@ static int replay_begin(CPUState *cpu, uint32_t len, uint32_t ret)
 static int replay_step(CPUState *cpu)
 {
     const uint32_t units = cpu->read_word(PTR_UNIT_TABLE);
+    /* Skip: checked between their units (a unit's three routines always run
+     * together, and a battle that has started is shown to the end). The
+     * rest of their units don't move; the turn file's end state is loaded
+     * as usual, exactly as when the replay is off. */
+    if (!g_rp_skipped && ch_replay_skip_poll(cpu, 0)) {
+        g_rp_skipped = 1;
+        fprintf(stderr, "[turns] replay skipped at their unit %d\n", g_rp_unit);
+    }
+    if (g_rp_skipped && g_rp_step == 0) {
+        g_rp_unit = UNIT_COUNT;
+        g_rp_wait = 0;
+        g_rp_prep = 0;
+    }
     if (g_rp_wait > 0) {
         /* A short pause after a unit's step, so the player sees it. */
         g_rp_wait--;
@@ -835,9 +857,9 @@ static int replay_step(CPUState *cpu)
         if ((u[0] != 0) != (e[0] != 0) || (e[0] && memcmp(u, e, 6) != 0)) differ++;
     }
     memcpy(g_buf, g_rp_buf, TF_HEADER + g_rp_len);
-    fprintf(stderr, "[turns] replay over: %d battle(s) fought again, %d gave the recorded result; "
-            "%d unit(s) differ from the turn file%s\n", g_rp_fought, g_rp_matched, differ,
-            differ ? " (the turn file is loaded now)" : "");
+    fprintf(stderr, "[turns] replay %s: %d battle(s) fought again, %d gave the recorded result; "
+            "%d unit(s) differ from the turn file%s\n", g_rp_skipped ? "skipped" : "over",
+            g_rp_fought, g_rp_matched, differ, differ ? " (the turn file is loaded now)" : "");
     return 0;
 }
 

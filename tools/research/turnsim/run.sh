@@ -57,6 +57,22 @@ grep -q 'STATUS Online games are Europa (Practice) only for now' "$d2/W.log" && 
     || { echo "FAIL a new online game started on Ganymede"; cat "$d2/W.log" "$d2/W.log.err"; exit 1; }
 echo "ok   a new online game on Ganymede was refused, and no turn file was written"
 
+# Skip: B presses skip at the start of every replay. B's copy moves none of
+# A's units on screen, and still ends every turn exactly where A left it.
+echo "== B skips every replay"
+d=$(mktemp -d)
+SIM_SKIP=1 CH_TURN_DIR="$d" CH_TURN_ROLE=B "$bin" B $((turns + 1)) > "$d/B.log" 2> "$d/B.log.err" & pb=$!
+sleep 0.3
+play "$d" A $turns "$d/A.log" & wait $!
+kill $pb 2>/dev/null || true; wait 2>/dev/null || true
+python3 "$here/check.py" "$d/A.log" "$d/B.log"
+n_rp=$(grep -c 'replay of turn file' "$d/B.log.err"); n_sk=$(grep -c 'replay skipped:' "$d/B.log.err")
+[ "$n_rp" -ge 4 ] && [ "$n_sk" = "$n_rp" ] && grep -q '^END A .* replay_moves=[1-9]' "$d/A.log" \
+    && ! grep -q 'replay skipped' "$d/A.log.err" \
+    || { echo "FAIL skipping the replay"; grep -h 'END\|replay' "$d"/*.log "$d"/*.err; exit 1; }
+grep -h 'DESYNC\|ERROR' "$d"/*.err && exit 1
+echo "ok   B skipped all $n_sk replays before any of A's units moved, and still saw A exactly as A left it"
+
 echo "== B restarts after loading turn file 7"
 d=$(mktemp -d)
 play "$d" B 4 "$d/B1.log" & pb=$!  # quits after sending file 6 (and loading 7)

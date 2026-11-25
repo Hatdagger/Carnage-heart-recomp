@@ -198,6 +198,17 @@ void host_osd_set_status(const char *msg)
     if (*msg) printf("STATUS %s\n", msg);
 }
 void ch_remote_lle_func_800333F8(CPUState *c) { (void)c; }
+/* mouse_pad_hle.c's skip check for the replay: with SIM_SKIP=n, "press"
+ * skip on the n-th check of each replay (1 = before any of their units
+ * moves). */
+int ch_replay_skip_poll(CPUState *c, int arm)
+{
+    static int calls;
+    (void)c;
+    if (arm) { calls = 0; return 0; }
+    const char *e = getenv("SIM_SKIP");
+    return e && ++calls == atoi(e);
+}
 /* The CPU's negotiation: must not run in a versus game. */
 static void cpu_neg(CPUState *c) { g_cpu_neg_ran++; ww(GP_FUNDS_CPU, rw(GP_FUNDS_CPU) - 1000); wh(P(1), rh(P(1)) | 4); c->gpr[2] = 1000; c->pc = c->gpr[31]; }
 void ch_remote_lle_func_80049828(CPUState *c) { cpu_neg(c); }

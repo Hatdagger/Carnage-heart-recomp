@@ -25,12 +25,15 @@ import android.widget.TextView;
 import java.util.ArrayList;
 import java.util.List;
 
+import io.psxrecomp.androidkit.KitGameActivity;
+import io.psxrecomp.androidkit.KitSetupActivity;
+
 /**
  * ONLINE CAMPAIGN: the Android version of the desktop launcher's Online
  * screen (launcher/ch_online_menu.inc). Your games with whose turn it is,
  * NEW GAME, JOIN A GAME by code, and a page per game with PLAY, CHECK AGAIN,
  * SHARE CODE and FORGET. PLAY starts the game with the relay switches set
- * (GameActivity puts them in the environment for src/turn_files.c).
+ * (CarnageHooks puts them in the environment for src/turn_files.c).
  */
 public class OnlineActivity extends Activity {
     static final String EXTRA_GAME = "game";
@@ -87,7 +90,7 @@ public class OnlineActivity extends Activity {
     public void onBackPressed() {
         if (joining) { joining = false; message = ""; show(); return; }
         if (page != null) { page = null; forgetArmed = false; message = ""; show(); return; }
-        startActivity(new Intent(this, SetupActivity.class));
+        startActivity(new Intent(this, KitSetupActivity.class));
         finish();
     }
 
@@ -236,8 +239,8 @@ public class OnlineActivity extends Activity {
         String st = game.status == Relay.Status.CHECKING ? "Checking..." : game.detail;
         if (st != null && !st.isEmpty()) text(st, 16, GREEN);
         if (!message.isEmpty()) text(message, 14, GREEN);
-        button("PLAY", 18, v -> play(game, GameActivity.RENDERER_GPU));
-        button("PLAY (SOFTWARE RENDERER)", 13, v -> play(game, GameActivity.RENDERER_SOFTWARE));
+        button("PLAY", 18, v -> play(game, KitGameActivity.RENDERER_GPU));
+        button("PLAY (SOFTWARE RENDERER)", 13, v -> play(game, KitGameActivity.RENDERER_SOFTWARE));
         button("CHECK AGAIN", 14, v -> { message = ""; checkAll(); }).setEnabled(!busy);
         button("SHARE CODE", 14, v -> shareCode(game));
         button(forgetArmed ? "PRESS AGAIN TO FORGET (your key goes with it)" : "FORGET THIS GAME", 13, v -> {
@@ -265,11 +268,11 @@ public class OnlineActivity extends Activity {
     }
 
     private void play(Relay.Game g, String renderer) {
-        Intent i = new Intent(this, GameActivity.class);
-        i.putExtra(GameActivity.EXTRA_RENDERER, renderer);
-        String s = getSharedPreferences(SetupActivity.PREFS, MODE_PRIVATE).getString(SetupActivity.PREF_SCALE, "3x");
-        i.putExtra(GameActivity.EXTRA_SCALE, s);
-        i.putExtra(GameActivity.EXTRA_ONLINE_GAME, g.code);
+        Intent i = new Intent(this, KitGameActivity.class);
+        i.putExtra(KitGameActivity.EXTRA_RENDERER, renderer);
+        String s = KitSetupActivity.scale(this);
+        i.putExtra(KitGameActivity.EXTRA_SCALE, s);
+        i.putExtra(CarnageHooks.EXTRA_ONLINE_GAME, g.code);
         startActivity(i);
         finish();
     }

@@ -1,0 +1,43 @@
+{
+  "_comment": "Android app settings for the PSXRecomp Android kit (psxrecomp-android-kit/docs/SETTINGS.md).",
+
+  "package": "com.hatdagger.carnageheart",
+  "app_name": "Carnage Heart",
+  "title": "CARNAGE HEART",
+
+  "exe_name": "CarnageHeart_Recompiled",
+  "generated_check": "generated/SCUS_946.04_dispatch.c",
+
+  "log_tag": "CarnageHeart",
+  "log_name": "carnageheart",
+  "data_dir_name": "CarnageHeart",
+
+  "apk_name": "CarnageHeart.apk",
+  "keystore_name": "carnageheart.keystore",
+  "key_alias": "carnageheart",
+  "key_pass": "carnageheart",
+  "cert_name": "Carnage Heart Recompiled (personal build)",
+
+  "default_scale": "3x",
+  "accent": "#7CFF9A",
+  "background": "#06140A",
+
+  "disc_prompt": "Choose your Carnage Heart (USA) disc.\n\nSelect the .cue file and all three .bin files together\n(tap and hold the first one, then tap the others),\nor a single .chd file.\n\nThey are copied into the app once (about 130 MB).",
+
+  "_launcher_alias": "The app's start screen was com.hatdagger.carnageheart.SetupActivity before the kit; keeping the name keeps home-screen icons.",
+  "launcher_alias": ".SetupActivity",
+
+  "res_dir": "android/res",
+  "java_dir": "android/java",
+  "java_hooks": ".CarnageHooks",
+  "extra_buttons": [
+    { "label": "ONLINE CAMPAIGN", "activity": ".OnlineActivity" }
+  ],
+  "permissions": [
+    "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE",
+    "android.permission.POST_NOTIFICATIONS",
+    "android.permission.RECEIVE_BOOT_COMPLETED"
+  ],
+  "manifest_application_xml": "android/manifest_application.xml"
+}

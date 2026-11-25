@@ -15,6 +15,8 @@ import android.content.SharedPreferences;
 
 import java.util.List;
 
+import io.psxrecomp.androidkit.KitGameActivity;
+
 /**
  * "It's your turn" for the online campaign, without a push server: Android
  * runs this about every 15 minutes (JobScheduler's shortest period; the
@@ -59,7 +61,7 @@ public class TurnCheckJob extends JobService {
                     Relay.check(this, g);
                     // While the game itself is open it fetches and shows the
                     // turn on its own; no notification needed.
-                    if (!GameActivity.running) notifyIfNew(this, g);
+                    if (!KitGameActivity.running) notifyIfNew(this, g);
                 }
             } finally {
                 if (!any) cancel(this);

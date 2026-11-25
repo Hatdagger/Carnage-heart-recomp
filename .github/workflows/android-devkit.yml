@@ -72,7 +72,7 @@ jobs:
 
   # Resolves the exact archives the Windows/Linux setup kit downloads for
   # "Build Android app" and prints their SHA-256 (copied into
-  # scripts/android/android_tools.json by hand).
+  # psxrecomp-android-kit/scripts/android_tools.json by hand).
   pins:
     runs-on: ubuntu-24.04
     steps:

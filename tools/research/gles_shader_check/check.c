@@ -1,9 +1,9 @@
 /* Compile + link the runtime's GL renderer shaders as GLSL ES on a real
  * OpenGL ES 3.2 driver (Mesa, headless "surfaceless" EGL), after the Android
- * translation in src/android/ch_gles_translate.c.
+ * translation in psxrecomp-android-kit/native/psxak_gles_translate.c.
  *
  *   python3 tools/research/gles_shader_check/extract.py PREPROCESSED.c shaders.bin
- *   cc -O1 -o check check.c ../../../src/android/ch_gles_translate.c -ldl
+ *   cc -O1 -o check check.c ../../../psxrecomp-android-kit/native/psxak_gles_translate.c -ldl
  *   ./check shaders.bin
  *
  * shaders.bin: records "name\0stage\0source\0" (stage "v" or "f"). EGL/GLES
@@ -15,7 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../../../src/android/ch_gles_translate.h"
+#include "../../../psxrecomp-android-kit/native/psxak_gles_translate.h"
 
 typedef void *EGLDisplay, *EGLConfig, *EGLContext, *EGLSurface;
 typedef int32_t EGLint;
@@ -166,7 +166,7 @@ int main(int argc, char **argv)
         snprintf(s->name, sizeof s->name, "%s", p); p += strlen(p) + 1;
         s->frag = (*p == 'f'); p += strlen(p) + 1;
         s->src = p; p += strlen(p) + 1;
-        s->es = ch_gles_translate(s->frag ? CH_GLES_FRAGMENT : CH_GLES_VERTEX, s->src);
+        s->es = psxak_gles_translate(s->frag ? PSXAK_GLES_FRAGMENT : PSXAK_GLES_VERTEX, s->src);
         if (getenv("DUMP_ES") && s->es) printf("==== %s\n%s\n", s->name, s->es);
     }
     int fails = 0;

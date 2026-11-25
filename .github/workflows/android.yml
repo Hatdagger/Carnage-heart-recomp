@@ -2,7 +2,7 @@
 #
 # Runs the same "Build Android App" step the setup kit gives players, on a
 # clean Linux and a clean Windows runner: downloads the pinned Android tools
-# (scripts/android/android_tools.json), builds SDL3 and the runtime with the
+# (psxrecomp-android-kit/scripts/android_tools.json), builds SDL3 and the runtime with the
 # NDK, compiles the Java shell and packs/signs the APK. Without generated/ the
 # runtime builds as the framework's "setup host", so this checks every step
 # except compiling the game's own C (which only a player's disc can make).
@@ -13,7 +13,8 @@ on:
     branches: ['android', 'android-*']
     paths-ignore: ['**.md']
   pull_request:
-    paths: ['android/**', 'scripts/android/**', 'src/android/**', 'cmake/ch_android.cmake',
+    paths: ['android/**', 'scripts/android/**', 'src/android/**', 'android_game.json',
+            'psxrecomp-android-kit', 'src/pointer_menu.c', 'CMakeLists.txt',
             '.github/workflows/android.yml']
   workflow_dispatch:
 

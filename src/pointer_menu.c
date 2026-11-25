@@ -621,25 +621,12 @@ void ch_pointer_draw_sdl(SDL_Renderer *r) {
     SDL_SetRenderClipRect(r, had_clip ? &clip : NULL);
 }
 
-#if defined(CH_WRAP_RENDER_PRESENT)
-/* Android: the build links with -Wl,--wrap=SDL_RenderPresent (see
- * cmake/ch_android.cmake), so every present of the SDL renderer comes here
- * first and the menu goes on top of the finished frame. */
-bool __real_SDL_RenderPresent(SDL_Renderer *renderer);
-#ifdef __ANDROID__
-void ch_android_frame_begin_present(void); /* src/android/ch_android_perf.c */
-void ch_android_frame_end_present(void);
-#endif
-bool __wrap_SDL_RenderPresent(SDL_Renderer *renderer) {
-#ifdef __ANDROID__
-    ch_android_frame_begin_present();
-#endif
+#if defined(__ANDROID__)
+/* Android: the PSXRecomp Android kit wraps SDL_RenderPresent
+ * (psxrecomp-android-kit/native/psxak_present.c) and calls this on top of
+ * every finished frame, so the menu shows on the software renderer too. */
+void psxak_draw_overlay_sdl(SDL_Renderer *renderer) {
     ch_pointer_draw_sdl(renderer);
-    bool ok = __real_SDL_RenderPresent(renderer);
-#ifdef __ANDROID__
-    ch_android_frame_end_present();
-#endif
-    return ok;
 }
 #endif
 

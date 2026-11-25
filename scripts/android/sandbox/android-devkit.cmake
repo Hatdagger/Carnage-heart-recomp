@@ -9,7 +9,7 @@
 #                    (default: <devkit>/../ndkres; prepare_sandbox.sh makes it)
 #
 # CMAKE_SYSTEM_NAME is Linux (CMake's Android platform insists on a full NDK)
-# with ANDROID set, as cmake/ch_android.cmake and SDL3/libwebp expect.
+# with ANDROID set, as psxrecomp-android-kit/cmake/psxak.cmake and SDL3/libwebp expect.
 if(NOT DEFINED ENV{ANDROID_DEVKIT})
     message(FATAL_ERROR "set ANDROID_DEVKIT to the unpacked android-devkit folder")
 endif()

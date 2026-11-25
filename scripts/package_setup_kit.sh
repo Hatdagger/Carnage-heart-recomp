@@ -27,10 +27,10 @@ bash "${ROOT}/psxrecomp/tools/ci/vendor_deps.sh" SDL3 psx_zlib psx_libwebp
 PROJECT_ARGS=()
 for f in CMakeLists.txt game.toml game_options.toml VERSION symbols.toml \
          psx_symbols.h catalog_identity.json disc_probe.json \
-         codegen_setup.c codegen_setup.h README.md; do
+         codegen_setup.c codegen_setup.h README.md android_game.json; do
   [[ -e "${ROOT}/${f}" ]] && PROJECT_ARGS+=(--project-file "${f}")
 done
-for d in seeds src assets mods launcher cmake android scripts; do
+for d in seeds src assets mods launcher cmake android scripts psxrecomp-android-kit; do
   [[ -d "${ROOT}/${d}" ]] && PROJECT_ARGS+=(--project-dir "${d}")
 done
 
@@ -68,8 +68,9 @@ done
 echo "Added rabbitizer generated headers to $(basename "${KIT_ZIP}")"
 
 # Android: "Build Android App" at the kit root builds CarnageHeart.apk from the
-# installed game (scripts/android/build_android_app.py; android/ and scripts/
-# are shipped above).
+# installed game (scripts/android/build_android_app.py, which runs the
+# PSXRecomp Android kit; android/, scripts/ and psxrecomp-android-kit/ are
+# shipped above).
 KIT_LAUNCHER_DIR="$(mktemp -d)"
 case "${ARTIFACT}" in
   windows-*) cp "${ROOT}/scripts/android/kit/Build Android App.bat" "${KIT_LAUNCHER_DIR}/" ;;

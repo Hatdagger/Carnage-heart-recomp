@@ -1,0 +1,17 @@
+        <!-- Carnage Heart's own screens, added inside <application> by the
+             PSXRecomp Android kit (android_game.json "manifest_application_xml"). -->
+
+        <!-- Online campaign: games, NEW GAME, JOIN A GAME, PLAY. -->
+        <activity
+            android:name="@PACKAGE@.OnlineActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:screenOrientation="sensorLandscape"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+
+        <!-- "It's your turn" check, about every 15 minutes. -->
+        <service
+            android:name="@PACKAGE@.TurnCheckJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />

@@ -3,7 +3,8 @@
 For the Claude build sandbox, which cannot download the NDK from Google.
 Players never use this: their setup kit downloads the real NDK.
 
-1. Clone the `android` branch. `gh` must be logged in with access to this
+1. Clone main with the `psxrecomp-android-kit` submodule
+   (`git submodule update --init --depth 1 psxrecomp-android-kit`). `gh` must be logged in with access to this
    repo (the devkit is a private draft release; use the REST API, GraphQL
    may be blocked).
 2. `scripts/android/sandbox/prepare_sandbox.sh /tmp/ch-android` and run the
@@ -22,6 +23,10 @@ Players never use this: their setup kit downloads the real NDK.
    `git submodule update` instead of from the kit, also run
    `git -C psxrecomp submodule update --init --depth 1` and copy the kit's
    `psxrecomp/third_party/*.tar.gz` into `psxrecomp/third_party/`.
+
+   `scripts/android/build_apk.py` runs the PSXRecomp Android kit's builder
+   with `android_game.json`. `--allow-no-game` builds without the disc (the
+   APK has no game in it; checks every other step).
 
 Signing: the owner keeps the test key `carnageheart.keystore` (made 24 Nov
 2026, cert SHA-256 19:6D:C3:EC:...:C9:98). Ask them to attach it and pass

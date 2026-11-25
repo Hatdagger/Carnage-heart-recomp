@@ -546,11 +546,11 @@ bool start_quick_rebuild(const fs::path& root) {
  * nobody thought of errs on the side of the full rebuild. */
 bool compile_only(const std::string& rel) {
     for (const char* d : { "launcher/", "cmake/", "src/", "assets/", "mods/", "docs/",
-                           "recomp-ui/", "scripts/", "android/" })
+                           "recomp-ui/", "scripts/", "android/", "psxrecomp-android-kit/" })
         if (starts_with(rel, d)) return true;
     for (const char* f : { "CMakeLists.txt", "README.md", "README-SETUP.txt", "VERSION",
                            "psx_game_version.txt", kSetupExe,
-                           "Build Android App.bat", "build-android-app.sh" })
+                           "Build Android App.bat", "build-android-app.sh", "android_game.json" })
         if (rel == f) return true;
     /* Libraries beside the setup exe. */
     if (rel.find('/') == std::string::npos &&

@@ -11,10 +11,15 @@ endif()
 
 project(CarnageHeartRecomp LANGUAGES C CXX)
 
-# Android (arm64 APK, built by scripts/android/build_apk.py): turns off the
-# desktop-only surfaces and makes the game a libmain.so for SDLActivity.
+# Android (arm64 APK): the PSXRecomp Android kit (psxrecomp-android-kit/,
+# settings in android_game.json) turns off the desktop-only surfaces and
+# makes the game a libmain.so for SDLActivity.
 if(ANDROID)
-    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ch_android.cmake")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp-android-kit/cmake/psxak.cmake")
+    # Online campaign (turn files through the relay): on in the app, which has
+    # its own Online screen (android/.../OnlineActivity.java) and does the
+    # relay requests in Java (src/android/ch_android_relay.c).
+    set(CH_REMOTE_BATTLE ON CACHE BOOL "Remote-player battles / online campaign")
 endif()
 
 # --- Opt-in product surfaces (OFF by default in the framework) -------------
@@ -79,8 +84,8 @@ psxrecomp_add_game_runtime(psx-runtime
 # starts the game with the turn switches (CH_TURN_*), so a normal campaign
 # plays exactly as before. Set here, before anything reads it (the launcher
 # menu does at ch_add_launcher_menu below); the option() further down then
-# keeps this value. -DCH_REMOTE_BATTLE=OFF still turns it off. Not on
-# Android yet: the APK has no launcher to start online games from.
+# keeps this value. -DCH_REMOTE_BATTLE=OFF still turns it off. (Android
+# sets it above.)
 if(NOT DEFINED CACHE{CH_REMOTE_BATTLE} AND NOT ANDROID)
     set(CH_REMOTE_BATTLE ON CACHE BOOL "Remote-player battle support (online campaign)")
 endif()
@@ -169,7 +174,7 @@ if(CH_MOUSE_SELFTEST)
 endif()
 
 # Test-only: -DCH_GLES_DESKTOP_TEST=ON runs the OpenGL renderer through the
-# Android OpenGL ES bridge (src/android/ch_android_gles.c) on a desktop Linux
+# Android OpenGL ES bridge (psxrecomp-android-kit/native/psxak_gles.c) on a desktop Linux
 # build, so the GLES path can be checked on Mesa without a device:
 #   SDL_VIDEO_DRIVER=offscreen EGL_PLATFORM=surfaceless ./CarnageHeart_Recompiled --renderer opengl ...
 # CH_GLES_HEADERS: a directory with GLES3/ GLES2/ EGL/ KHR/ headers (the NDK
@@ -180,14 +185,14 @@ endif()
 option(CH_GLES_DESKTOP_TEST "Desktop build using the Android GLES bridge (testing only)" OFF)
 if(CH_GLES_DESKTOP_TEST AND NOT ANDROID)
     set(CH_GLES_HEADERS "" CACHE PATH "Directory with GLES3/ and KHR/ headers")
+    set(_psxak_n "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp-android-kit/native")
     foreach(_t IN LISTS _ch_mouse_targets)
         target_sources(${_t} PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_gles.c"
-            "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_gl_shims.c"
-            "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_gles_translate.c")
+            "${_psxak_n}/psxak_gles.c" "${_psxak_n}/psxak_gl_shims.c"
+            "${_psxak_n}/psxak_gles_translate.c")
+        target_include_directories(${_t} PRIVATE "${_psxak_n}")
         set_source_files_properties(
-            "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_gles.c"
-            "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_gl_shims.c"
+            "${_psxak_n}/psxak_gles.c" "${_psxak_n}/psxak_gl_shims.c"
             TARGET_DIRECTORY ${_t}
             PROPERTIES COMPILE_OPTIONS "-idirafter;${CH_GLES_HEADERS}")
         target_link_options(${_t} PRIVATE
@@ -197,15 +202,11 @@ if(CH_GLES_DESKTOP_TEST AND NOT ANDROID)
     endforeach()
 endif()
 
-# Android: libmain.so extras (src/android shims, GLES/EGL, the menu drawing
-# hook). Last, so it sees whether the pointer code (HLE) was linked in.
-if(CH_ANDROID)
-    set(CH_POINTER_LINKED OFF)
-    if(_ch_game_shards AND NOT PSXRECOMP_FORCE_SETUP_HOST AND CH_MOUSE_IMPL STREQUAL "HLE")
-        set(CH_POINTER_LINKED ON)
-    endif()
-    get_property(_ch_android_targets GLOBAL PROPERTY CH_ANDROID_GAME_TARGETS)
-    foreach(_t IN LISTS _ch_android_targets)
-        ch_android_finish_target(${_t})
-    endforeach()
+# Android: the kit's libmain.so extras (shims, GLES/EGL, present hook) plus
+# Carnage Heart's own (online relay through Java, start-up hook). The touch
+# menu (src/pointer_menu.c) draws through the kit's psxak_draw_overlay_sdl().
+if(PSXAK_ANDROID)
+    psxak_finish_targets(SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_relay.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_game.c")
 endif()

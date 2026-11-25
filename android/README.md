@@ -3,10 +3,17 @@
 Builds an arm64 APK of Carnage Heart from **your own disc**. The APK holds
 code made from your disc, so it is for your own devices only.
 
-Players don't run this by hand: the Windows setup kit's "Build Android app"
-step downloads the tools once and runs it (in progress). For developers:
+The Android work is done by the **PSXRecomp Android kit**
+(`psxrecomp-android-kit/`, a submodule shared with other PSXRecomp games).
+This game's settings are in `android_game.json`; what is left here is only
+Carnage Heart's own: icons, the online campaign screens and the touch menu.
+
+Players don't run this by hand: the setup kit's "Build Android App" step (and
+the launcher's BUILD ANDROID APP row) downloads the tools once and runs it.
+For developers:
 
 ```sh
+git submodule update --init psxrecomp-android-kit
 ./psxrecomp/tools/ci/build_emitters.sh
 python3 psxrecomp/psxrecomp_cli.py generate --config game.toml --project-root . --disc "/path/to/Carnage Heart (USA).cue"
 python3 scripts/android/build_apk.py \
@@ -23,24 +30,30 @@ vendored SDL3/zlib/libwebp archives (the setup kit ships them;
 `psxrecomp/tools/ci/vendor_deps.sh` fetches them).
 
 ## What's where
-- `cmake/ch_android.cmake`: Android switches (no launcher UI, wizard,
-  netplay, Vulkan, OpenXR, rewind); the game becomes `libmain.so` for
-  SDLActivity. The framework submodule is not patched.
-- `src/android/`: `SDL_main` wrapper (app files folder = game folder, logs to
-  logcat and `files/carnageheart.log`), getcontext/swapcontext for the BIOS
-  fibers (Bionic has none), two desktop-GL stubs.
-- `android/`: manifest, icons, and the Java shell. `SetupActivity` unpacks the
-  game files and imports the disc (.cue + .bin, or .chd) once through Android's
-  file picker; `GameActivity` (SDLActivity) runs the game with the software
-  renderer. SDL's own Java glue is taken from the vendored SDL3 tarball at
-  build time so it always matches the C library.
-- Online campaign (`-DCH_REMOTE_BATTLE=ON`, on by default here):
+- **The kit** (`psxrecomp-android-kit/`, see its README): the game becomes
+  `libmain.so` for SDLActivity; desktop-only parts off; the SDL_main wrapper
+  (game folder, logs to logcat and `files/carnageheart.log`, GPU probe,
+  sharpness); the OpenGL ES bridge; getcontext/swapcontext for Bionic; the
+  start screen (disc picker, PLAY, SHARPNESS, software renderer, logs) and
+  the game activity; the APK and one-click builders.
+- `android_game.json`: package, names, colours, disc prompt, signing key name,
+  the ONLINE CAMPAIGN button, extra permissions.
+- `android/res/`: icons. `android/manifest_application.xml`: the online
+  screen and the turn check service (added to the kit's manifest).
+- `scripts/android/build_apk.py`, `build_android_app.py`: thin wrappers that
+  run the kit's builders with this game's settings (the launcher and the
+  kit launchers in `scripts/android/kit/` call these paths).
+- `src/android/ch_android_game.c`: start-up hook (`psxak_game_start`) for the
+  online relay. `src/pointer_menu.c` draws the touch menu through the kit's
+  `psxak_draw_overlay_sdl()` on the software renderer.
+- Online campaign (`-DCH_REMOTE_BATTLE=ON`, on here):
   `OnlineActivity` is the Online screen (games, NEW GAME, JOIN A GAME, PLAY,
-  SHARE CODE, FORGET); `GameActivity` sets the `CH_TURN_*` switches with
-  `Os.setenv` before the game starts; `Relay.java` talks to the relay and also
-  makes the game's own relay requests (Android has no curl;
-  `src/android/ch_android_relay.c` calls it through JNI); `TurnCheckJob`
-  checks about every 15 minutes and posts "it's your turn". Games and turn
-  files live in `files/online-turns/` as on the desktop. PC test of the relay
-  code: `tools/research/android_relay_test/run.sh`.
+  SHARE CODE, FORGET); `CarnageHooks` (the kit's `KitHooks`) sets the
+  `CH_TURN_*` switches with `Os.setenv` before the game starts and schedules
+  the turn check; `Relay.java` talks to the relay and also makes the game's
+  own relay requests (Android has no curl; `src/android/ch_android_relay.c`
+  calls it through JNI); `TurnCheckJob` checks about every 15 minutes and
+  posts "it's your turn". Games and turn files live in `files/online-turns/`
+  as on the desktop. PC test of the relay code:
+  `tools/research/android_relay_test/run.sh`.
 - Minimum Android 10 (API 29), target API 35, 16 KB page aligned.

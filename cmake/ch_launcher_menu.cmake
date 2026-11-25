@@ -47,6 +47,7 @@ function(ch_add_launcher_menu TGT)
     # ch_online.h go at the very top.
     string(PREPEND _txt "#include \"ch_update.h\"   /* Carnage Heart launcher menu */\n")
     string(PREPEND _txt "#include \"ch_online.h\"   /* Carnage Heart online campaign */\n")
+    string(PREPEND _txt "#include \"ch_apk_share.h\"   /* Carnage Heart: app to tablet */\n#include <ctime>\n#include <vector>\n")
     string(REPLACE "${_a1}"
         "/* Carnage Heart launcher menu (cmake/ch_launcher_menu.cmake). */\n#include \"ch_menu.inc\"\n\n${_a1}"
         _txt "${_txt}")
@@ -89,6 +90,15 @@ function(ch_add_launcher_menu TGT)
     # address (the project's own relay by default, set up 2026-11-24);
     # online-turns/relay.txt beside the game or CH_TURN_RELAY overrides it.
     set(CH_TURN_RELAY_URL "https://ch-turns.surreal64.workers.dev" CACHE STRING "Turn relay address built into the launcher (relay/README.md)")
+    # SEND APP TO TABLET (launcher/ch_apk_share.cpp): a small Wi-Fi web
+    # server for CarnageHeart.apk and a QR code (vendored Nayuki qrcodegen,
+    # MIT, launcher/third_party/qrcodegen).
+    target_sources(${TGT} PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/launcher/ch_apk_share.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/launcher/third_party/qrcodegen/qrcodegen.c")
+    if(WIN32)
+        target_link_libraries(${TGT} PRIVATE ws2_32)
+    endif()
     set(_ch_online "${CMAKE_CURRENT_SOURCE_DIR}/launcher/ch_online.cpp")
     target_sources(${TGT} PRIVATE "${_ch_online}")
     set(_ch_online_defs "CH_TURN_RELAY_DEFAULT=\"${CH_TURN_RELAY_URL}\"")

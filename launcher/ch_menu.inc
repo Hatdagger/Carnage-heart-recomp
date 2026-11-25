@@ -30,6 +30,7 @@ namespace ch_menu {
 
 enum Page { PAGE_MAIN = 0, PAGE_ONLINE, PAGE_SHARE, PAGE_UPDATE, PAGE_SETTINGS,
             PAGE_CAMPAIGN, PAGE_CGAME, PAGE_JOIN,   /* ch_online_menu.inc */
+            PAGE_APK,                               /* send the app to a tablet */
             PAGE__COUNT };
 
 struct State {
@@ -461,17 +462,140 @@ static void draw_update_page(LauncherModel* m, const Gfx& g, const Input& in) {
     }
 }
 
-/* ---- main page ------------------------------------------------------------- */
-
-enum MainEntry { MAIN_LAUNCH = 0, MAIN_ONLINE, MAIN_SHARE, MAIN_UPDATE, MAIN_ANDROID, MAIN_SETTINGS, MAIN_EXIT };
+/* ---- SEND APP TO TABLET ------------------------------------------------------ */
 
 /* Result of the last BUILD ANDROID APP click, shown under its info text. */
 static std::string g_android_msg;
 static bool g_android_ok = false;
+/* While a build window is open: when it was opened (seconds since 1970) and
+ * the APK size seen at the last look, so the QR page opens by itself once a
+ * new CarnageHeart.apk is complete. */
+static int64_t  g_android_started = 0;
+static uint64_t g_android_seen_size = 0;
+static double   g_android_next_look = 0.0;
+
+static bool g_apk_serving = false;      /* the QR page started the server */
+
+static void apk_page_close() {
+    if (g_apk_serving) ch_apk_share::stop();
+    g_apk_serving = false;
+}
+
+/* Called every frame: has the build window just written a new APK? */
+static void watch_android_build(LauncherModel* m) {
+    if (!g_android_started || ImGui::GetTime() < g_android_next_look) return;
+    g_android_next_look = ImGui::GetTime() + 1.0;
+    uint64_t size = 0;
+    int64_t mtime = 0;
+    if (!ch_apk_share::apk_info(nullptr, &size, &mtime) || mtime + 2 < g_android_started) {
+        g_android_seen_size = 0;
+        return;
+    }
+    /* The same size twice in a row: the build has finished writing it. */
+    if (size != g_android_seen_size) { g_android_seen_size = size; return; }
+    g_android_started = 0;
+    g_android_msg = "FINISHED: CarnageHeart.apk IS READY";
+    g_android_ok = true;
+    if (!m->in_session && m->view == LNG_VIEW_DASHBOARD &&
+        (g_state.page == PAGE_MAIN || g_state.page == PAGE_APK)) {
+        apk_page_close();
+        open_page(PAGE_APK);
+    }
+}
+
+/* A QR code, black on white, with its quiet border, in a square of side
+ * `side` design units at (x, y). Module edges land on whole pixels. */
+static void draw_qr(const Gfx& g, float x, float y, float side,
+                    const std::vector<uint8_t>& mod, int n) {
+    const ImVec2 a = at(g, x, y), b = at(g, x + side, y + side);
+    g.dl->AddRectFilled(a, b, IM_COL32(255, 255, 255, 255));
+    const int cells = n + 8;
+    const float px = std::floor((b.x - a.x) / (float)cells);
+    if (px < 1.0f) return;
+    const float ox = std::floor(a.x + ((b.x - a.x) - px * cells) * 0.5f) + 4.0f * px;
+    const float oy = std::floor(a.y + ((b.y - a.y) - px * cells) * 0.5f) + 4.0f * px;
+    for (int r = 0; r < n; ++r)
+        for (int c = 0; c < n; ++c)
+            if (mod[(size_t)r * n + c])
+                g.dl->AddRectFilled(ImVec2(ox + c * px, oy + r * px),
+                                    ImVec2(ox + (c + 1) * px, oy + (r + 1) * px),
+                                    IM_COL32(0, 0, 0, 255));
+}
+
+static void draw_apk_page(LauncherModel* m, const Gfx& g, const Input& in) {
+    if (!g_apk_serving) {
+        g_apk_serving = true;
+        ch_apk_share::start(m->rom_present ? std::string(m->rom_full) : std::string());
+    }
+    const ch_apk_share::Status st = ch_apk_share::status();
+    static std::string qr_url;
+    static std::vector<uint8_t> qr_mod;
+    static int qr_n = 0;
+    if (st.running && st.url != qr_url) {
+        qr_url = st.url;
+        qr_n = ch_apk_share::qr(qr_url, &qr_mod);
+    }
+
+    header(g, "SEND APP TO TABLET", "OVER YOUR HOME WI-FI");
+    panel(g, 24.0f, 76.0f, 270.0f, 340.0f, "SCAN WITH THE TABLET");
+    if (st.running && qr_n > 0) {
+        draw_qr(g, 39.0f, 88.0f, 240.0f, qr_mod, qr_n);
+        text(g, 39.0f, 336.0f, 9.0f, kDim, "OR TYPE THIS IN THE TABLET'S BROWSER:");
+        text(g, 39.0f, 350.0f, 10.0f, kText, st.url.c_str(), 240.0f);
+    } else {
+        text(g, 39.0f, 100.0f, 11.0f, kWarn,
+             st.error.empty() ? "COULD NOT MAKE THE QR CODE" : st.error.c_str(), 240.0f);
+    }
+    const RowHit close = row(g, 25.0f, 384.0f, 268.0f, true, true, "CLOSE", "", false, false);
+
+    panel(g, 310.0f, 76.0f, 306.0f, 340.0f, "ON THE TABLET");
+    text(g, 324.0f, 92.0f, 11.0f, kText,
+         "1. Connect the tablet to the same Wi-Fi as this PC.\n"
+         "2. Open the camera and point it at the code, then tap the link it shows.\n"
+         "3. Tap DOWNLOAD THE APP and install it. Allow installing unknown apps if asked.\n"
+         "4. Not on the tablet yet? Download the disc files on the same page.\n"
+         "5. In the app, tap CHOOSE DISC FILES and pick them all.", 278.0f);
+    text(g, 324.0f, 262.0f, 10.0f, kDim,
+         "The link works only while this screen is open. If Windows asks about "
+         "the firewall, allow private networks.", 278.0f);
+    if (st.running) {
+        const char* what = "WAITING FOR THE TABLET";
+        char buf[160];
+        if (st.sending_total) {
+            std::snprintf(buf, sizeof buf, "SENDING %s", st.last_file.c_str());
+            what = buf;
+        } else if (st.downloads) {
+            std::snprintf(buf, sizeof buf, "SENT %d FILE%s. LAST: %s", st.downloads,
+                          st.downloads > 1 ? "S" : "", st.last_file.c_str());
+            what = buf;
+        }
+        text(g, 324.0f, 316.0f, 10.0f, kDim, "STATUS");
+        text(g, 324.0f, 332.0f, 11.0f, st.sending_total || st.downloads ? kOn : kHi, what, 278.0f);
+        if (st.sending_total) {
+            const float w = 278.0f;
+            const float f = std::min(1.0f, (float)((double)st.sending_done / (double)st.sending_total));
+            g.dl->AddRect(at(g, 324.0f, 366.0f), at(g, 324.0f + w, 378.0f), kLine);
+            g.dl->AddRectFilled(at(g, 325.0f, 367.0f), at(g, 325.0f + (w - 2.0f) * f, 377.0f), kHi);
+            std::snprintf(buf, sizeof buf, "%.1f / %.1f MB  TO %s", st.sending_done / 1048576.0,
+                          st.sending_total / 1048576.0, st.last_client.c_str());
+            text(g, 324.0f, 384.0f, 10.0f, kDim, buf);
+        }
+    }
+    const bool back = footer(g, "A / ENTER / LEFT CLICK  CLOSE      B / ESC / RIGHT CLICK  BACK", true);
+    if (in.back || back || in.confirm || close.click) {
+        apk_page_close();
+        open_page(PAGE_MAIN);
+    }
+}
+
+/* ---- main page ------------------------------------------------------------- */
+
+enum MainEntry { MAIN_LAUNCH = 0, MAIN_ONLINE, MAIN_SHARE, MAIN_UPDATE, MAIN_ANDROID, MAIN_SEND_APK,
+                 MAIN_SETTINGS, MAIN_EXIT };
 
 static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
     struct Entry { MainEntry id; const char* label; const char* info; };
-    Entry entries[8];
+    Entry entries[9];
     int count = 0;
     const bool install = needs_install(m);
     if (m->in_session)
@@ -498,8 +622,20 @@ static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
                 "Make the Android version of your installed game (CarnageHeart.apk) "
                 "for your own phone or tablet. A window opens and shows the "
                 "progress. The first time it downloads the Android tools once "
-                "(large; needs the internet). When it says Finished, copy "
-                "CarnageHeart.apk from the game folder to your device." };
+                "(large; needs the internet). When it finishes, a QR code "
+                "appears here: scan it with the tablet to download the app." };
+        static bool have_apk = false;          /* looked at once a second */
+        static double apk_next_look = 0.0;
+        if (ImGui::GetTime() >= apk_next_look) {
+            apk_next_look = ImGui::GetTime() + 1.0;
+            have_apk = ch_apk_share::apk_info(nullptr, nullptr, nullptr);
+        }
+        if (!install && have_apk)
+            entries[count++] = { MAIN_SEND_APK, "SEND APP TO TABLET",
+                "Show a QR code for the Android app you built. Scan it with the "
+                "tablet's camera to download the app (and your disc files) "
+                "straight from this PC over your home Wi-Fi. No cable or cloud "
+                "drive needed." };
     }
     entries[count++] = { MAIN_SETTINGS, "SETTINGS",
         "Display, sound, controller and mouse." };
@@ -589,9 +725,14 @@ static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
         case MAIN_ANDROID: {
             std::string why;
             g_android_ok = ch_update::start_android_build(&why);
-            g_android_msg = g_android_ok ? "BUILD WINDOW OPENED" : why;
+            g_android_msg = g_android_ok ? "BUILD WINDOW OPENED. THE QR CODE APPEARS WHEN IT FINISHES" : why;
+            if (g_android_ok) {
+                g_android_started = (int64_t)std::time(nullptr);
+                g_android_seen_size = 0;
+            }
             break;
         }
+        case MAIN_SEND_APK: open_page(PAGE_APK); break;
         case MAIN_SETTINGS: launcher_model_set_view(m, LNG_VIEW_SETTINGS); break;
         case MAIN_EXIT:     m->action = LNG_ACTION_QUIT; break;
     }
@@ -764,9 +905,14 @@ static void draw(LauncherModel* m, const LauncherTheme&) {
             case PAGE_CAMPAIGN: draw_campaign_page(m, g, in); break;
             case PAGE_CGAME:  draw_cgame_page(m, g, in); break;
             case PAGE_JOIN:   draw_join_page(m, g, in); break;
+            case PAGE_APK:    draw_apk_page(m, g, in); break;
             default:          draw_main(m, g, in); break;
         }
     }
+    /* The app is served only while its QR page is on screen. */
+    if (g_apk_serving && (m->view != LNG_VIEW_DASHBOARD || g_state.page != PAGE_APK || m->in_session))
+        apk_page_close();
+    watch_android_build(m);
     g.dl->PopClipRect();
 }
 

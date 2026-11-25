@@ -835,6 +835,10 @@ bool restart_into_rebuild() {
 #endif
 }
 
+std::string kit_folder() {
+    return kit_root().u8string();
+}
+
 /* ---- Build Android App ----------------------------------------------------- */
 
 #ifdef _WIN32

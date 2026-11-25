@@ -54,6 +54,8 @@ bool restart_into_rebuild();
  * window (Windows: "Build Android App.bat"; Linux: build-android-app.sh in a
  * terminal) and returns at once; false with the reason when it can't. */
 bool android_builder_available();
+/* The kit folder (where CarnageHeart.apk is written), "" when not found. */
+std::string kit_folder();
 bool start_android_build(std::string* why);
 
 } /* namespace ch_update */

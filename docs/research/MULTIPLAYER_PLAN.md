@@ -186,7 +186,7 @@ How it works (`src/turn_files.c`, `src/remote_battle.c`, `src/hotseat.c`, new `s
 Known gaps
 - **Both players need the new build**: an older build refuses version-3 turn files ("update the game"). Games already in progress carry on (the new build reads version 2; replays start with the first version-3 file).
 - Only units, positions and battles are replayed. Production, research and base changes simply appear when the end state is loaded.
-- The replay can't be skipped yet (a button to skip would be a small addition).
+- ~~The replay can't be skipped yet~~ (2026-11-25, session 8, PR #16: Start, Cross, Circle or a click / tap skips the rest of it; the end state is loaded at once).
 
 ### Negotiation and research (2026-11-25, session 7, step 6f)
 Branch `negotiation-research`, **PR #15**. The map is in CAMPAIGN_RAM_MAP.md ("Negotiation and research"); a plain-words guide to the four Negotiation choices for the tutorials is in NEGOTIATION_GUIDE.md.
@@ -206,7 +206,7 @@ Branch `negotiation-research`, **PR #15**. The map is in CAMPAIGN_RAM_MAP.md ("N
 - **Real game, two copies, local relay** (new `tools/research/negotiation_demo.py`), through the game's own screens: A bought CP-478FX (Kawashima Corp) on turn 1 and B's copy showed it as the opponent's; B paid 5000 towards Golle 1800C1 (Union Claude) and A's copy showed it as the opponent's payment, with the same 2 turns saved on both copies; over 2 rounds every blueprint in development moved on exactly 2 turns; the waiting side's funds were never touched; both copies had identical worlds throughout; B closed and restarted and its blueprints, payments and goodwill came back from its turn file.
 
 Known gaps
-- The **market stance** (`0x800DF394`, prices +-15% for winning or losing) is worked out on each copy from its own battle counters; not synced. Small price differences between the two players are possible.
+- The **market stance** (`0x800DF394`, prices +-15% for winning or losing) is worked out on each copy from its own battle counters; not synced. Small price differences between the two players are possible. Each copy working out its own stance is right ("I am winning" is per player); what may be wrong is the inputs. Bases come from the turn file, but the battle counters `0x800DF398`/`0x800DF39C` are not in it, and a battle fought on the opponent's device may never reach mine. Before syncing them, read `0x8004B9F4` and the battle result code to learn what the two counters count and who adds to them (needs the disc).
 - A development delay rolled on A's half only shows "delayed" (flag 0x8000) to A, even if B also paid for it.
 - The "reserved for the investor" window (+03 = 0x40) only keeps the CPU from buying; between two players it does nothing (as before, both can buy any blueprint on sale).
 - Not tested: Android (same code), a real window.
@@ -238,7 +238,7 @@ Branch `online-android`, **PR #9** (on top of v0.1.3 main, which already has PR 
 **Tested on a device (2026-11-24, owner)**: the test APK (signed with the owner's key) on the Lenovo Legion Tab Y700 Gen 2 — the owner reports multiplayer worked. PR #9 merged into main.
 
 Known gaps
-- The notification icon is the app icon (Android shows it as a plain shape in the status bar).
+- ~~The notification icon is the app icon~~ (2026-11-25, session 8, PR #16: a white hex icon, `res/drawable/ic_stat_turn.xml`).
 - If the game is still running in the background and PLAY is pressed for a different online game, Android brings back the running game with its old switches. Closing the game first avoids this.
 
 ## Option A: Live VS over the internet (later)
@@ -260,6 +260,22 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 7. ~~Optional: visual replay of the enemy's turn~~ (done 2026-11-24, session 6, branch `enemy-replay`; battles are fought again from the same seed).
 7b. ~~Negotiation and research: map, stop the CPU's, carry both players' in the turn files~~ (done 2026-11-25, session 7, branch `negotiation-research`).
 8. Later: Options A and B (the card and save layout they need is now mapped).
+
+## Session status (chat B, 2026-11-25, session 8)
+**Done**
+- Branch `replay-skip-and-polish` on top of `negotiation-research`, **PR #16** (base: PR #15's branch; retarget to main after #15 is merged).
+- **Skip the replay**: a fresh press of Start, Cross or Circle, or a click / tap, skips the rest of the opponent's-turn replay. Their remaining units don't move, and the end state is loaded at once (the same as with the replay off). The skip is checked between units, so a battle that has started plays to the end. A button held from the End Turn press doesn't count. The status line says "(X, O or Start: skip)". The new `ch_replay_skip_poll()` is in `mouse_pad_hle.c`.
+- **Android notification icon**: a white hex-and-unit shape (`android/res/drawable/ic_stat_turn.xml`), looked up by name.
+- Simulator: a new case, "B skips every replay" (8 skipped, end states match); all other cases still pass. Skipping part-way through a unit was also tried.
+
+**Next**
+- Hub: merge PR #15, then PR #16 (retarget it to main).
+- With the disc: check the skip in the real game (is the port-1 pad buffer updated while the replay drives VSync?) and run `replay_demo.py`. Then read `0x8004B9F4` for the market stance counters (`0x800DF398`/`0x800DF39C`) and decide whether to carry them in the turn file.
+- Owner: Android test APK with the replay, negotiation, skip and new icon (needs the disc, `carnageheart.keystore` and the devkit release).
+- Later: Options A (live VS) and B (card sharing).
+
+**Blocked**
+- No disc or keystore in session 8, so nothing was tested in the real game or on Android, and the market stance waits.
 
 ## Session status (chat B, 2026-11-25, session 7)
 **Done**

@@ -189,7 +189,7 @@ Known gaps
 - The replay can't be skipped yet (a button to skip would be a small addition).
 
 ### Negotiation and research (2026-11-25, session 7, step 6f)
-Branch `negotiation-research`. The map is in CAMPAIGN_RAM_MAP.md ("Negotiation and research"); a plain-words guide to the four Negotiation choices for the tutorials is in NEGOTIATION_GUIDE.md.
+Branch `negotiation-research`, **PR #15**. The map is in CAMPAIGN_RAM_MAP.md ("Negotiation and research"); a plain-words guide to the four Negotiation choices for the tutorials is in NEGOTIATION_GUIDE.md.
 
 **What was wrong before**: turn files carried funds but not negotiation, so each copy kept its own blueprints, investments and goodwill (lost on a new device), each copy's companies developed blueprints at their own random pace, and the CPU's negotiation spent the waiting side's funds every End Turn (hot-seat put the funds back, but the CPU still "owned" blueprints on each copy).
 
@@ -266,10 +266,10 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 - PR #11 (replay) had already been merged by the hub.
 - **Negotiation and research mapped** (CAMPAIGN_RAM_MAP.md): the six companies, the blueprint state table, R&D slots, company records, the four choices with their costs and RAM effects, prices, the End Turn routine and what the CPU does there. Checked live (purchase, R&D payment, optimization, Information, End Turns).
 - **Plain-words guide** for chat A's tutorials: NEGOTIATION_GUIDE.md (also the project doc "claude/Negotiation Guide").
-- **Online**: the CPU's negotiation is off in versus games; turn files version 4 carry the world and both players' ledgers (step 6f above). Simulator and a real two-copy test pass; `replay_demo.py` and `online_demo.py` re-run.
+- **Online**: the CPU's negotiation is off in versus games; turn files version 4 carry the world and both players' ledgers (step 6f above). Simulator and a real two-copy test pass; `replay_demo.py` and `online_demo.py` re-run and pass (no desyncs). Pushed; **PR #15** opened for the hub.
 
 **Next**
-- Hub: merge `negotiation-research`. Release note: both players must update again (version-4 turn files).
+- Hub: merge **PR #15** (branch `negotiation-research`). Release note: both players must update again (version-4 turn files).
 - Owner: Android test APK with the replay and negotiation (needs `carnageheart.keystore` attached in a chat B session, and the devkit release).
 - Chat A: tutorials can use NEGOTIATION_GUIDE.md.
 - Small: skip button for the replay; monochrome notification icon; maybe sync the market stance.

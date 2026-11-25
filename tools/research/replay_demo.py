@@ -13,9 +13,16 @@ replay).
     REPLAY_RESTART=1 python3 tools/research/replay_demo.py
         # B closes after sending turn file 6 and starts again once A has
         # played turn 4: the battle is replayed when the map opens
+    REPLAY_SKIP=1 python3 tools/research/replay_demo.py
+        # each copy presses Circle as soon as a replay starts: the replay
+        # stops and the turn file's end state is loaded
 
 Checks: every replay ends with the units where the turn file says, the
-replayed battle gives the recorded result, and no desyncs. (A wins the
+replayed battle gives the recorded result, and no desyncs. With
+REPLAY_SKIP=1: every replay was skipped. Always: the market stance counters
+in the turn files match their battle records and each copy set them on
+loading (turnsim/stance_check.py), and both copies end on the same battle
+count with each one's kills the other's losses. (A wins the
 battle and only defends, so the game runs until the rounds run out.)
 """
 import os, re, sys, time, shutil, subprocess
@@ -26,6 +33,8 @@ OUT = os.path.join(od.BUILD, 'research', 'replay')
 od.OUT = OUT
 RESTART = os.environ.get('REPLAY_RESTART') == '1'
 SHOTS_EVERY = int(os.environ.get('REPLAY_SHOT_FRAMES', '45'))
+SKIP = os.environ.get('REPLAY_SKIP') == '1'
+END_RE = r'\[turns\] replay (over|skipped):'
 
 
 def watch_replay(p, seq, timeout=900):
@@ -39,10 +48,14 @@ def watch_replay(p, seq, timeout=900):
         time.sleep(0.2)
     od.use(p)
     shots = []
-    n_over = od.log(p).count('[turns] replay over')
-    before = od.log(p)[:od.log(p).index(start_line)].count('[turns] replay over')
+    ends = lambda text: len(re.findall(END_RE, text))
+    before = ends(od.log(p)[:od.log(p).index(start_line)])
     i = 0
-    while od.log(p).count('[turns] replay over') <= before:
+    if SKIP:
+        ch.wait(20)
+        ch.shot(os.path.join(OUT, '%s-file%d-before-skip.png' % (p, seq)))
+        ch.press('circle', hold=6, after=4)
+    while ends(od.log(p)) <= before:
         if time.time() - t > timeout:
             raise SystemExit('replay of turn file %d on %s did not finish' % (seq, p))
         path = os.path.join(OUT, '%s-file%d-%02d.png' % (p, seq, i))
@@ -55,7 +68,7 @@ def watch_replay(p, seq, timeout=900):
         ch.wait(SHOTS_EVERY)
     contact(shots, os.path.join(OUT, '%s-file%d-sheet.png' % (p, seq)))
     lines = [l for l in od.log(p).splitlines() if l.startswith('[turns] replay')]
-    over = [l for l in lines if l.startswith('[turns] replay over')][before]
+    over = [l for l in lines if re.match(END_RE, l)][before]
     print('%s replayed turn file %d (%d screenshots): %s' % (p, seq, len(shots), over[len('[turns] '):]))
     return over
 
@@ -170,11 +183,26 @@ def main():
     for l in battles:
         print(' ', l)
     check('replays ran (%d)' % len(overs), len(overs) > 0)
-    check('every replay ended with the units where the turn file says',
-          all(' 0 unit(s) differ' in o for _, _, o in overs))
-    check('a battle was replayed', len(battles) > 0)
+    if SKIP:
+        check('every replay was skipped', all('replay skipped:' in o for _, _, o in overs))
+    else:
+        check('every replay ended with the units where the turn file says',
+              all(' 0 unit(s) differ' in o for _, _, o in overs))
+        check('a battle was replayed', len(battles) > 0)
     check('every replayed battle gave the recorded result',
           all('went exactly as recorded' in l for l in battles))
+    # The market stance counters (turn files version 5).
+    logfiles = [os.path.join(OUT, x) for x in sorted(os.listdir(OUT)) if x.endswith('.log') and x[:2] in ('A-', 'B-')]
+    r = subprocess.run([sys.executable, '-I', os.path.join(od.REPO, 'tools', 'research', 'turnsim', 'stance_check.py'),
+                        os.path.join(OUT, 'turnsA')] + logfiles, capture_output=True, text=True)
+    print(r.stdout.strip())
+    check('stance counters match the battle records and were set on loading', r.returncode == 0)
+    import glob, struct
+    newest = sorted(glob.glob(os.path.join(OUT, 'turnsA', 'turn-*.cht')))[-1]
+    nb = open(newest, 'rb').read()
+    tag, bt, recv, send = struct.unpack_from('<4sIII', nb, len(nb) - 16)
+    print('  newest turn file %s: %d battle(s), kills: receiver %d, sender %d' % (os.path.basename(newest), bt, recv, send))
+    check('the battles fought reached the stance counters', tag == b'STC1' and bt > 0 and recv + send > 0)
     for p in 'AB':
         check('%s: no desync' % p, 'DESYNC' not in logs[p])
     print('game over reached' if 'game over' in logs['A'] else

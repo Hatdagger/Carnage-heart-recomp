@@ -31,6 +31,7 @@ sleep 0.3   # B's map opens before A has played turn 1
 play "$d" A $turns "$d/A.log" & wait $!
 kill $pb 2>/dev/null || true; wait 2>/dev/null || true
 python3 "$here/check.py" "$d/A.log" "$d/B.log"
+python3 "$here/stance_check.py" "$d" "$d/A.log.err" "$d/B.log.err"
 # Negotiation: the CPU's negotiation never ran (exit code and line), A owns
 # blueprint 1 and B sees it as the opponent's; B's investment in blueprint 2
 # earned B (not A) 20% off when it was finished on A's half.
@@ -57,6 +58,24 @@ grep -q 'STATUS Online games are Europa (Practice) only for now' "$d2/W.log" && 
     || { echo "FAIL a new online game started on Ganymede"; cat "$d2/W.log" "$d2/W.log.err"; exit 1; }
 echo "ok   a new online game on Ganymede was refused, and no turn file was written"
 
+# Skip: B presses skip at the start of every replay (and battles wipe out
+# side 2, so the market stance counters have kills to carry). B's copy moves none of
+# A's units on screen, and still ends every turn exactly where A left it.
+echo "== B skips every replay"
+d=$(mktemp -d)
+SIM_LETHAL=1 SIM_SKIP=1 CH_TURN_DIR="$d" CH_TURN_ROLE=B "$bin" B $((turns + 1)) > "$d/B.log" 2> "$d/B.log.err" & pb=$!
+sleep 0.3
+SIM_LETHAL=1 CH_TURN_DIR="$d" CH_TURN_ROLE=A "$bin" A $turns > "$d/A.log" 2> "$d/A.log.err" & wait $!
+kill $pb 2>/dev/null || true; wait 2>/dev/null || true
+python3 "$here/check.py" "$d/A.log" "$d/B.log"
+python3 "$here/stance_check.py" "$d" "$d/A.log.err" "$d/B.log.err"
+n_rp=$(grep -c 'replay of turn file' "$d/B.log.err"); n_sk=$(grep -c 'replay skipped:' "$d/B.log.err")
+[ "$n_rp" -ge 4 ] && [ "$n_sk" = "$n_rp" ] && grep -q '^END A .* replay_moves=[1-9]' "$d/A.log" \
+    && ! grep -q 'replay skipped' "$d/A.log.err" \
+    || { echo "FAIL skipping the replay"; grep -h 'END\|replay' "$d"/*.log "$d"/*.err; exit 1; }
+grep -h 'DESYNC\|ERROR' "$d"/*.err && exit 1
+echo "ok   B skipped all $n_sk replays before any of A's units moved, and still saw A exactly as A left it"
+
 echo "== B restarts after loading turn file 7"
 d=$(mktemp -d)
 play "$d" B 4 "$d/B1.log" & pb=$!  # quits after sending file 6 (and loading 7)
@@ -72,6 +91,7 @@ grep -q 'map start: Europa (Practice), as in the turn files' "$d/B2.log.err" \
     || { echo "FAIL B's map start did not check the scenario"; exit 1; }
 echo "ok   B's map start checked the scenario against the turn files"
 python3 "$here/check.py" "$d/A.log" "$d/B2.log" $(( (first - 1) / 2 ))
+python3 "$here/stance_check.py" "$d" "$d/A.log.err" "$d/B1.log.err" "$d/B2.log.err"
 grep -h 'DESYNC\|ERROR' "$d"/*.err && exit 1
 grep -h 'END' "$d"/*.log
 echo "logs in $d"
@@ -90,6 +110,7 @@ same_state "$d/B1.log" PRE "$d/B2.log" OWN
 first=$(grep -m1 'loaded turn file' "$d/B2.log.err" | sed 's/.*turn file \([0-9]*\).*/\1/')
 echo "B's first End Turn after the restart waited for and loaded turn file $first"
 python3 "$here/check.py" "$d/A.log" "$d/B2.log" $(( (first - 1) / 2 ))
+python3 "$here/stance_check.py" "$d" "$d/A.log.err" "$d/B1.log.err" "$d/B2.log.err"
 grep -h 'DESYNC\|ERROR' "$d"/*.err && exit 1
 echo "logs in $d"
 
@@ -121,6 +142,7 @@ if command -v node >/dev/null 2>&1; then
         || { echo "FAIL B on a new computer did not catch up from the relay"; exit 1; }
     echo "B on a new computer fetched turn files 1-7 from the relay and caught up when the map opened"
     python3 "$here/check.py" "$dA/A.log" "$dB2/B.log" 3
+    python3 "$here/stance_check.py" "$dA" "$dA/A.log.err" "$dB/B.log.err" "$dB2/B.log.err"
     grep -h 'DESYNC\|ERROR' "$dA"/*.err "$dB"/*.err "$dB2"/*.err && exit 1
     grep -h 'Your turn is sent' "$dA/A.log" | head -1
     echo "logs in $dA, $dB and $dB2"

@@ -71,7 +71,7 @@
  * sent: the bottom line says which scenario to start, and online play is
  * off until the game is restarted (the map plays as a normal campaign).
  *
- * File layout (version 4, little-endian), 52-byte header then the body:
+ * File layout (version 5, little-endian), 52-byte header then the body:
  *    0  4  "CHTF"
  *    4  2  version (1)
  *    6  1  sender role (0 = A, 1 = B)
@@ -107,10 +107,14 @@
  *              blueprints x 4, 32 R&D slots x 2), the receiver's ledger,
  *              the sender's ledger (297 x 4, 32 investments x 4,
  *              6 companies x 8, 6 "asked" counters x 2)
- * Version 2-3 files are still read (2: no replay; 2-3: negotiation stays as
- * it is on this copy). Header bytes 4-5 say the version; a file's
+ *          version 5 adds, after that, the market stance's counters (16
+ *          bytes): "STC1", battles fought (0x800DF39C, the same for both
+ *          players), the receiver's kills and the sender's kills (enemy
+ *          units wiped out; the receiver's go in 0x800DF398)
+ * Version 2-4 files are still read (2: no replay; 2-3: negotiation stays as
+ * it is on this copy; 2-4: the stance counters stay as they are). Header bytes 4-5 say the version; a file's
  * file_version must be at most TF_VERSION, so an older build refuses
- * version 4 ("update the game").
+ * version 5 ("update the game").
  *
  * Replay ("watch what the enemy did", version 3): when the opponent's turn
  * file arrives, the game first puts the start tables in RAM and runs the
@@ -122,6 +126,8 @@
  * turn file's end state is loaded as before, so the replay can never change
  * the game. After each of their units steps, the replay waits half a second
  * (CH_TURN_REPLAY_PAUSE frames, default 30). CH_TURN_REPLAY=0 turns it off.
+ * Start, Cross or Circle (or a click / tap) skips the rest of the replay:
+ * their remaining units don't move and the end state is loaded at once.
  *
  * The previous-tables hash links the files into a chain: each file says
  * which state it was played from, and the receiver checks that it is the
@@ -154,7 +160,7 @@
 #define UNIT_SIZE       22u
 #define UNIT_COUNT      64
 
-#define TF_VERSION      4
+#define TF_VERSION      5
 #define TF_MIN_VERSION  2         /* oldest version still read (no replay) */
 #define TF_HEADER       52u
 
@@ -171,8 +177,12 @@
 #define TF_MAX_BATTLES  64
 #define TF_MAX_BODY     (TF_TABLES + TF_CARDS + 1u + TF_MAX_ORDERS * TF_ORDER_SIZE + \
                          1u + TF_MAX_BATTLES * TF_BATTLE_SIZE + \
-                         TF_MAX_BATTLES * 4u + TF_TABLES + TF_NEG_MAX)
+                         TF_MAX_BATTLES * 4u + TF_TABLES + TF_NEG_MAX + TF_STC_SIZE)
 #define TF_NEG_MAX      4096u     /* negotiation section (negotiation_sync.c) */
+#define TF_STC_SIZE     16u       /* version 5: the market stance's battle counters */
+#define GP_KILLS        0x800DF398u   /* enemy units wiped out (0x80035988, owner-2 units) */
+#define GP_BATTLES      0x800DF39Cu   /* battles fought (just before 0x8001CF48) */
+#define GP_STANCE       0x800DF394u   /* market stance -2..+2 (0x8004B9F4) */
 
 /* negotiation_sync.c */
 uint32_t ch_neg_size(void);
@@ -225,6 +235,19 @@ static uint8_t g_start_raw[TF_TABLES];
 static int g_have_start_raw;
 
 static uint8_t g_buf[TF_HEADER + TF_MAX_BODY];
+
+/* The market stance (0x800DF394, prices +-15%) is worked out at every End
+ * Turn (0x8004B9F4) from the share of bases the player holds and the
+ * player's kills per battle: 0x800DF398 (enemy units wiped out, counted by
+ * 0x80035988) over 0x800DF39C (battles, counted just before the battle
+ * engine). Each copy works it out for its own player, which is right; the
+ * counters are what must agree. They are counted from the battle records
+ * (both players' battles), sent in every turn file and set on loading, so a
+ * skipped or switched-off replay, a restart or a new device gives the same
+ * prices. g_stc_known: the counters below are up to date (0: take them
+ * from RAM at the next send). */
+static uint32_t g_stc_battles, g_stc_mine, g_stc_theirs;
+static int g_stc_known;
 
 int ch_turns_active(void)
 {
@@ -443,6 +466,7 @@ void ch_turns_begin(CPUState *cpu)
             g_receive_only = 0;     /* new game: A plays and sends turn 1 */
             g_next_send = 1;
             g_prev_hash = 0;
+            g_stc_known = 0;
             fprintf(stderr, "[turns] new game: player A plays turn 1\n");
         } else {
             g_receive_only = 1;
@@ -464,6 +488,50 @@ void ch_turns_begin(CPUState *cpu)
         capture_orders(cpu);
         read_raw_tables(cpu, g_start_raw);
         g_have_start_raw = 1;
+    }
+}
+
+/* 1 if every OKE of one side (0: side 1, 1: side 2) of a battle record was
+ * destroyed: the game's clean-up (0x80035988) then deletes that unit. */
+static int battle_side_wiped(const uint8_t *b, int side)
+{
+    int any = 0;
+    for (int s = 0; s < 3; s++) {
+        const uint8_t *e = b + 6 + (side * 3 + s) * 6;
+        if ((int16_t)get16(e) < 0) continue;
+        any = 1;
+        if ((int16_t)get16(e + 2) > 0) return 0;
+    }
+    return any;
+}
+
+/* Add my half's battles (records in my numbering: units 0-31 are mine) to
+ * the stance counters. */
+static void stance_add_battles(CPUState *cpu, const uint8_t *battles, int n)
+{
+    if (!g_stc_known) {
+        /* First send (or the last file loaded had no counters): start from
+         * what the game counted. */
+        g_stc_battles = cpu->read_word(GP_BATTLES) - (uint32_t)n;
+        g_stc_mine = cpu->read_word(GP_KILLS);
+        g_stc_theirs = 0;
+        for (int i = 0; i < n; i++) {
+            const uint8_t *b = battles + i * TF_BATTLE_SIZE;
+            for (int side = 0; side < 2; side++)
+                if (b[side] >= 32 && battle_side_wiped(b, side)) g_stc_mine--;
+        }
+        if ((int32_t)g_stc_battles < 0) g_stc_battles = 0;
+        if ((int32_t)g_stc_mine < 0) g_stc_mine = 0;
+        g_stc_known = 1;
+    }
+    g_stc_battles += (uint32_t)n;
+    for (int i = 0; i < n; i++) {
+        const uint8_t *b = battles + i * TF_BATTLE_SIZE;
+        for (int side = 0; side < 2; side++) {
+            if (!battle_side_wiped(b, side)) continue;
+            if (b[side] < 32) g_stc_theirs++;    /* my unit was wiped out */
+            else g_stc_mine++;
+        }
     }
 }
 
@@ -497,6 +565,13 @@ static size_t build_file(CPUState *cpu, int game_over)
     /* Version 4: negotiation and research (the world and both ledgers). */
     if (ch_neg_size() <= TF_NEG_MAX)
         p += ch_neg_write(cpu, p);
+    /* Version 5: the market stance's counters, with this half's battles. */
+    stance_add_battles(cpu, (const uint8_t *)g_battles, g_nbattles);
+    memcpy(p, "STC1", 4);
+    put32(p + 4, g_stc_battles);
+    put32(p + 8, g_stc_theirs);      /* the receiver's kills */
+    put32(p + 12, g_stc_mine);
+    p += TF_STC_SIZE;
     const uint32_t body_len = (uint32_t)(p - body);
 
     /* The game counted the turn at the start of End Turn. A's turn n and B's
@@ -626,18 +701,86 @@ static void log_what_happened(const uint8_t *orders, int norders, const uint8_t 
 /* Version 4: the negotiation section is the last part of the body. own: my
  * own file, turned back. Without one (version 2-3) negotiation stays as it
  * is on this copy. */
+static uint32_t stc_len(const uint8_t *buf, uint32_t len)
+{
+    if (get16(buf + 4) < 5 || len < TF_STC_SIZE ||
+        memcmp(buf + TF_HEADER + len - TF_STC_SIZE, "STC1", 4) != 0) return 0;
+    return TF_STC_SIZE;
+}
+
 static uint32_t neg_len(const uint8_t *buf, uint32_t len)
 {
     const uint32_t n = ch_neg_size();
+    len -= stc_len(buf, len);
     if (get16(buf + 4) < 4 || len < n || memcmp(buf + TF_HEADER + len - n, "NEG1", 4) != 0) return 0;
     return n;
+}
+
+/* The sections after the start tables: negotiation (version 4) and the
+ * stance counters (version 5). */
+static uint32_t tail_len(const uint8_t *buf, uint32_t len)
+{
+    return neg_len(buf, len) + stc_len(buf, len);
 }
 
 static void load_negotiation(CPUState *cpu, int own)
 {
     const uint32_t len = get32(g_buf + 44), n = neg_len(g_buf, len);
-    if (n && ch_neg_read(cpu, g_buf + TF_HEADER + len - n, n, own))
+    if (n && ch_neg_read(cpu, g_buf + TF_HEADER + len - stc_len(g_buf, len) - n, n, own))
         fprintf(stderr, "[turns] negotiation and research loaded%s\n", own ? " (my own file)" : "");
+}
+
+/* Version 5: set the stance counters from the file in g_buf (own: my own
+ * file, turned back). Older files: the game's own counts stand, and the
+ * next send starts from them. This also undoes what the replay counted. */
+/* The game's market stance routine 0x8004B9F4, done in C: called after a
+ * turn file is loaded, so the prices on my turn come from the state just
+ * loaded (the game itself only works it out at End Turn, and once when the
+ * map opens, before the catch-up). Bases: my share of the owned bases, 0-10
+ * (5 if none is owned). Battles: (kills / 10) x 10 / (battles / 10), 0 if
+ * fewer than 10 battles. Stance = bases / 2 - 2 without a battle score,
+ * otherwise (bases + battles) / 4 - 2, kept within -2..+2. */
+static void stance_refresh(CPUState *cpu)
+{
+    const uint32_t bases = cpu->read_word(PTR_BASE_TABLE);
+    int32_t owned = 0, mine = 0;
+    for (int b = 0; b < BASE_COUNT; b++) {
+        const uint8_t o = cpu->read_byte(bases + b * BASE_SIZE);
+        owned += o != 0;
+        mine += o == 1;
+    }
+    const int32_t base_score = owned ? mine * 10 / owned : 5;
+    const int32_t battles = (int32_t)cpu->read_word(GP_BATTLES) / 10;
+    const int32_t kills = (int32_t)cpu->read_word(GP_KILLS) / 10;
+    const int32_t battle_score = battles ? kills * 10 / battles : 0;
+    int32_t stance = (base_score + battle_score) / 2;
+    stance = battle_score ? stance / 2 - 2 : stance - 2;
+    if (stance > 2) stance = 2;
+    if (stance < -2) stance = -2;
+    const int32_t was = (int32_t)cpu->read_word(GP_STANCE);
+    cpu->write_word(GP_STANCE, (uint32_t)stance);
+    if (stance != was)
+        fprintf(stderr, "[turns] market stance %d (was %d)\n", (int)stance, (int)was);
+}
+
+static void load_stance(CPUState *cpu, int own)
+{
+    const uint32_t len = get32(g_buf + 44);
+    if (!stc_len(g_buf, len)) {
+        g_stc_known = 0;
+        stance_refresh(cpu);
+        return;
+    }
+    const uint8_t *p = g_buf + TF_HEADER + len - TF_STC_SIZE;
+    g_stc_battles = get32(p + 4);
+    g_stc_mine = get32(p + (own ? 12 : 8));
+    g_stc_theirs = get32(p + (own ? 8 : 12));
+    g_stc_known = 1;
+    cpu->write_word(GP_BATTLES, g_stc_battles);
+    cpu->write_word(GP_KILLS, g_stc_mine);
+    fprintf(stderr, "[turns] market stance counters: %u battle(s), my kills %u, theirs %u\n",
+            (unsigned)g_stc_battles, (unsigned)g_stc_mine, (unsigned)g_stc_theirs);
+    stance_refresh(cpu);
 }
 
 /* Write a checked turn file (in g_buf) into RAM. Returns its game-over flag. */
@@ -674,6 +817,7 @@ static int load_file(CPUState *cpu, uint32_t seq, uint32_t len)
             cpu->read_word(GP_FUNDS_CPU), (h[7] & 1) ? ", game over" : "");
     log_what_happened(orders, norders, battles, nbattles);
     load_negotiation(cpu, 0);
+    load_stance(cpu, 0);
     return h[7] & 1;
 }
 
@@ -704,6 +848,11 @@ static const uint8_t *g_rp_battles, *g_rp_seeds;
 static int g_rp_nbattles;
 static uint8_t g_rp_used[TF_MAX_BATTLES];
 static int g_rp_fought, g_rp_matched;
+static int g_rp_skipped;          /* the player pressed skip */
+/* mouse_pad_hle.c: 1 if Start, Cross or Circle, or a click or tap, was
+ * pressed since the last check (arm 1: the replay starts, held buttons
+ * don't count; arm 2: it is over). */
+extern int ch_replay_skip_poll(CPUState *cpu, int arm);
 
 static int replay_enabled(void)
 {
@@ -726,7 +875,7 @@ static const uint8_t *replay_parts(const uint8_t *buf, uint32_t len, const uint8
 {
     if (get16(buf + 4) < 3) return NULL;
     const uint8_t *p = buf + TF_HEADER + TF_TABLES + TF_CARDS,
-                  *end = buf + TF_HEADER + len - neg_len(buf, len);
+                  *end = buf + TF_HEADER + len - tail_len(buf, len);
     if (p >= end) return NULL;
     const int norders = *p++;
     p += norders * TF_ORDER_SIZE;
@@ -763,6 +912,8 @@ static int replay_begin(CPUState *cpu, uint32_t len, uint32_t ret)
     g_rp_nbattles = nbattles;
     memset(g_rp_used, 0, sizeof g_rp_used);
     g_rp_fought = g_rp_matched = 0;
+    g_rp_skipped = 0;
+    ch_replay_skip_poll(cpu, 1);
 
     write_tables(cpu, g_rp_buf + off);
     /* Their designs, for the battles (remote_battle.c turns RAM round to
@@ -776,7 +927,8 @@ static int replay_begin(CPUState *cpu, uint32_t len, uint32_t ret)
     g_rp_active = 1;
 
     char msg[128];
-    snprintf(msg, sizeof msg, "Player %c's turn: watching what they did...", g_role ? 'A' : 'B');
+    snprintf(msg, sizeof msg, "Player %c's turn: watching what they did... (X, O or Start: skip)",
+             g_role ? 'A' : 'B');
     host_osd_set_status(msg);
     fprintf(stderr, "[turns] replay of turn file %u: %d unit(s), %d battle(s)\n",
             (unsigned)get32(g_rp_buf + 8), moving, nbattles);
@@ -789,6 +941,20 @@ static int replay_begin(CPUState *cpu, uint32_t len, uint32_t ret)
 static int replay_step(CPUState *cpu)
 {
     const uint32_t units = cpu->read_word(PTR_UNIT_TABLE);
+    /* Skip: a press at any time is noted, and acted on between their units
+     * (a unit's three routines always run together, and a battle that has
+     * started is shown to the end). The
+     * rest of their units don't move; the turn file's end state is loaded
+     * as usual, exactly as when the replay is off. */
+    if (!g_rp_skipped && ch_replay_skip_poll(cpu, 0)) {
+        g_rp_skipped = 1;
+        fprintf(stderr, "[turns] replay skipped at their unit %d\n", g_rp_unit);
+    }
+    if (g_rp_skipped && g_rp_step == 0) {
+        g_rp_unit = UNIT_COUNT;
+        g_rp_wait = 0;
+        g_rp_prep = 0;
+    }
     if (g_rp_wait > 0) {
         /* A short pause after a unit's step, so the player sees it. */
         g_rp_wait--;
@@ -822,6 +988,7 @@ static int replay_step(CPUState *cpu)
         return 1;
     }
     g_rp_active = 0;
+    ch_replay_skip_poll(cpu, 2);
     /* How close the replay came to the sender's end state: each unit's
      * owner, task and position. (OKE HP is checked per battle; base repair,
      * production and resupply ran after the moves on their device, so the
@@ -835,9 +1002,9 @@ static int replay_step(CPUState *cpu)
         if ((u[0] != 0) != (e[0] != 0) || (e[0] && memcmp(u, e, 6) != 0)) differ++;
     }
     memcpy(g_buf, g_rp_buf, TF_HEADER + g_rp_len);
-    fprintf(stderr, "[turns] replay over: %d battle(s) fought again, %d gave the recorded result; "
-            "%d unit(s) differ from the turn file%s\n", g_rp_fought, g_rp_matched, differ,
-            differ ? " (the turn file is loaded now)" : "");
+    fprintf(stderr, "[turns] replay %s: %d battle(s) fought again, %d gave the recorded result; "
+            "%d unit(s) differ from the turn file%s\n", g_rp_skipped ? "skipped" : "over",
+            g_rp_fought, g_rp_matched, differ, differ ? " (the turn file is loaded now)" : "");
     return 0;
 }
 
@@ -1077,6 +1244,7 @@ static int load_own_file(CPUState *cpu, uint32_t seq)
             (unsigned)seq, cpu->read_word(GP_TURN), cpu->read_word(GP_FUNDS_PLAYER),
             cpu->read_word(GP_FUNDS_CPU));
     load_negotiation(cpu, 1);
+    load_stance(cpu, 1);
     return 1 + (h[7] & 1);
 }
 

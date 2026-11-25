@@ -121,6 +121,66 @@ Verified live: Capture on a unit at its base (task 3, target 107 = (11,4)); Patr
 
 **Factory** (base menu): Production (`0x8005785C`: pick a product and an amount for a line, using a number pad), Add Line (`0x800593DC`: funds -24,900 here, base +58 +1), Upgrade (`0x8005A0FC`: funds -7,600 here, line level +1 and capacity 80 -> 100). Funds for production are only spent during End Turn.
 
+## Negotiation and research (mapped 2026-11-25)
+Command menu > Negotiation. Mapped from the code (`0x8004BBB8` and the screens at `0x8004FE04`, `0x800516E0`, `0x80052F6C`, `0x80053858`) and checked live at Europa (Practice): a purchase, an R&D payment, an optimization, Information, and End Turns before and after (RAM diffs).
+
+**Six companies**, index 0-5 in the order of the list: Kawashima Corp, Brenan, Mcmorell, AAC, Union Claude, Canyon Logic (names at `0x800BD418`). The company being visited is gp+0xB30 (`0x800DFE88`). Each sells a fixed list of blueprints (static table `0x800BD0AC`, 6 x 138 bytes, s16 list at +10, ends with -1). Each company menu has four choices: **Blue Prints, R & D, Optimization, Information**.
+
+**Blueprints** ("parts", 297 of them, 0-296): bodies, engines, CPUs, weapons, ammo, armour, options. Static table `0x800C0C7C`, 36 bytes each: +00 id, +17 optimization time (turns), +18 kind flags, +19 turn from which the company starts developing it, **+1C base price** (u32). Even-numbered bodies have an **optimized version** = the next part (odd number).
+
+### Tables (allocated at run time; go through the pointers)
+| Pointer | What |
+|---|---|
+| `0x800DFFFC` | **Blueprint state**, 297 x 4 bytes (see below) |
+| `0x800DFF6C` | **R&D slots**, 32 x 12: +00 s16 blueprint (-1 free), +04 u32 the player's total investment, +08 u32 the CPU's |
+| `0x800E00B4` | **Companies**, 6 x 8: +00 u16 goodwill (max 60000), +02 u16 purchases (recent), +04 u16 (1 or 2, fixed), +06 u16 flags (bit 0: the player funded a blueprint here that was finished) |
+| `0x80128040` | 6 x s16: Information asked at that company this turn (cleared at End Turn) |
+
+Globals: `0x800DF394` **market stance** -2..+2 (End Turn, `0x8004B9F4`: from the share of bases the player holds and a battle ratio `0x800DF398`/`0x800DF39C`); +2 = player winning. `0x800DF788` (gp+0x430) turn of the CPU's last big purchase.
+
+### Blueprint state (4 bytes)
+| Bits | Meaning |
+|---|---|
+| +00 0x0001 | finished: on sale |
+| 0x0002 | **the player owns it** |
+| 0x0004 | **the CPU (Drakken) owns it** |
+| 0x0008 | being developed (has an R&D slot) |
+| 0x0010 | ammo not offered (its weapon is not on sale) |
+| 0x0020 | can be optimized (bodies) |
+| 0x0100 | the player was told about it (Information) |
+| 0x0400 | optimization ordered by the player |
+| 0x0800 / 0x2000 | the player's R&D bonus earned / the player invested in its R&D |
+| 0x1000 | optimized for the player |
+| 0x4000 | ammo (follows a weapon) |
+| 0x8000 | development delayed (the player invested) |
+| +02 bits 0-5 | turns left (development; once finished, the player's optimization) |
+| +02 bits 6-7 | the investor's discount: 1 = 10%, 2 = 20% |
+| +03 | while developing: success chance (%). Once finished: 0x80 + turns = the CPU's optimization; 0x40 + turns = reserved for the investor (the CPU can't buy it) |
+
+At the start of Europa (Practice): 22 blueprints owned by both sides (0x0007), 64 on sale, 6 in development (one already funded by the CPU).
+
+### What the player can do (all costs are taken from funds at once)
+| Choice | Cost | RAM | Status |
+|---|---|---|---|
+| **Blue Prints**: buy a blueprint | base price x factor / 100, minus the R&D discount (10% / 20%) | flag 0x0002; funds; company +00 goodwill +price/1000 (price/10000 at 10,000 and over), +02 purchases +1 | Verified (CP-478FX: 4000, goodwill +4, purchases +1) |
+| **R & D**: pay towards a blueprint being developed | the amount on the screen (5000 offered for Golle 1800C1) | slot +04 += amount, flag 0x2000, goodwill + amount/1000; turns left -= total x 100 / amount shown / 40 (not below 8), chance += total x 100 / amount / 20 (max 100) | Verified (5000: 23 -> 21 turns) |
+| **Optimization**: improve a body you own | the optimized version's base price (16000 for Prowler I) | flag 0x0400, +02 = turns (12); goodwill +16. When it runs out: 0x1000, and **the optimized version (next part) becomes yours** | Verified (forced to 1 turn: Prowler I optimized, part 1 owned) |
+| **Information** | free | flag 0x0100 on the item mentioned; `0x80128040[company]` = 1. Next End Turn: goodwill -2, purchases -1 at the company last visited | Verified |
+
+**Price factor** (`0x800BDCD4`, by market stance -2..+2): normal 95/100/100/105/115 %; good customer (goodwill 15+ or 6+ recent purchases at that company) 85/90/95/100/100 %. So prices rise when the player is winning. Two more rows are used for the CPU (92/97/100/105/115 and 80/92/100/100/100).
+
+**R&D bonus** (End Turn, when a blueprint the player paid for is finished): flag 0x0800, company flag bit 0, and a discount when buying it: 10% if the player paid at least 80% of its price, 20% at 160%. If the player paid more than the CPU and at least 160%, the CPU can't buy it for a few turns (+03 = 0x40 + turns).
+
+### End Turn: `0x8004BBB8` (also called once when the map opens, `0x800318E4`)
+1. `0x8004B9F4`: market stance.
+2. Information penalty (see above), counters at `0x80128040` cleared.
+3. For each company, for each blueprint on its list, `0x8004BDD4(part, company)`: starts development when the turn reaches part +19 (takes a free R&D slot); counts development down; at 0 rolls the chance: success = on sale (the slot is freed; the player's bonus; **if the player did not invest, `0x80049CA4` lets the CPU buy it at once** when the CPU has more than about 170,000); failure = 6 + random turns more (0x8000 if the player invested). Counts down the player's optimizations (done: 0x1000, next part owned) and the CPU's (+03 0x80; done: the CPU owns the next part).
+4. Every other turn (second turn counter even): each company's goodwill -2 and purchases -1.
+5. **The CPU's negotiation**, all from CPU funds (`0x800DF390`): `0x80049828` buys blueprints (with more than 160,000: a big purchase every few turns, the matching ammo too; otherwise a few random ones), `0x80049F44` orders optimizations, `0x8004A214` invests in R&D (slot +08). Seen: 7,000-76,000 a turn.
+
+### Versus (hot-seat and turn files): `src/negotiation_sync.c`
+The CPU's negotiation (step 5 and `0x80049CA4`) is skipped. Each player has a **ledger** (bits 0x0002, 0x0010, 0x0100, 0x0400, 0x0800, 0x1000, 0x2000, 0x8000, the discount bits, byte +03 and the optimization countdown once finished, slot +04, the 6 company records, the Information counters); the rest is the **world** (what exists, is developed, is on sale, which slot holds what). RAM holds the world, the current player's ledger, and the opponent's ownership shown as the CPU's (0x0004, slot +08). The world moves on once a round, on player A's half; on B's half `0x8004BBB8` runs (B's optimizations, goodwill) and the world is put back. Turn files (version 4) carry the world and both ledgers. Details: MULTIPLAYER_PLAN.md.
+
 ## Not mapped yet
-- Negotiation/research state.
+- What company +04 and +06 bits other than bit 0 are for; the exact meaning of flag 0x0200.
 - (Answered in VS_MODE_AND_SAVES.md: how the battle engine picks player or CPU designs for each side.)

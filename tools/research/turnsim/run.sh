@@ -12,7 +12,7 @@ set -e
 here=$(cd "$(dirname "$0")" && pwd); src="$here/../../../src"
 bin="${TMPDIR:-/tmp}/ch-turnsim"
 cc -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -O1 -I"$here/mock" -o "$bin" \
-   -pthread "$here/sim.c" "$src/turn_files.c" "$src/turn_relay.c" "$src/hotseat.c" "$src/remote_battle.c" "$src/turn_replay.c"
+   -pthread "$here/sim.c" "$src/turn_files.c" "$src/turn_relay.c" "$src/hotseat.c" "$src/remote_battle.c" "$src/turn_replay.c" "$src/negotiation_sync.c"
 turns=${1:-8}
 play() {  # play <dir> <player> <turns> <log>
     CH_TURN_DIR="$1" CH_TURN_ROLE=$2 exec "$bin" $2 $3 > "$4" 2> "$4.err"
@@ -31,6 +31,14 @@ sleep 0.3   # B's map opens before A has played turn 1
 play "$d" A $turns "$d/A.log" & wait $!
 kill $pb 2>/dev/null || true; wait 2>/dev/null || true
 python3 "$here/check.py" "$d/A.log" "$d/B.log"
+# Negotiation: the CPU's negotiation never ran (exit code and line), A owns
+# blueprint 1 and B sees it as the opponent's; B's investment in blueprint 2
+# earned B (not A) 20% off when it was finished on A's half.
+neg_ok() { if grep "^NEG " "$1" | tail -1 | grep -q "$2"; then echo "ok   $3"; else echo "FAIL $3"; grep "^NEG " "$1" | tail -1; exit 1; fi; }
+neg_ok "$d/A.log" "^NEG A part2 flags=0001 discount=0 part1 mine=1" "negotiation: A bought blueprint 1; no discount for A on blueprint 2"
+neg_ok "$d/B.log" "^NEG B part2 flags=2801 discount=2 part1 mine=0" "negotiation: B's investment earned B 20% off blueprint 2"
+if grep -q "CPU negotiation ran" "$d/A.log" "$d/B.log"; then echo "FAIL the CPU's negotiation ran"; exit 1; fi
+echo "ok   the CPU's negotiation never ran"
 
 # The scenario check: the wrong scenario loads and sends nothing, and the
 # map is then a normal campaign (the CPU brain runs again: exit code 3).

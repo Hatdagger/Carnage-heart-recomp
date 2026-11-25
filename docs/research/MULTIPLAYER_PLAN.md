@@ -106,7 +106,7 @@ The waiting copy no longer pauses inside End Turn. At the swap point the hook se
 What this does not do yet: the player still has to keep the game open until the opponent has played. The next step (with storage) is to let the player close the game after sending, and have the launcher tell them when it is their turn; starting the game then catches up automatically (the restart test above shows that part already works).
 
 Known gaps:
-- Research/negotiation (still unmapped) is not in the file; each copy keeps its own. The CPU's research still spends the waiting side's funds on every End Turn (up to about 80000 a turn in the tests); hot-seat puts them back, so it does no harm, but it is wasted work.
+- ~~Research/negotiation (still unmapped) is not in the file; each copy keeps its own. The CPU's research still spends the waiting side's funds on every End Turn~~ (fixed 2026-11-25, step 6f below: the CPU's negotiation is off and turn files carry both players' negotiation).
 - Hot-seat's gaps still apply (kills of the other side's OKEs go to the CPU card records).
 - Each copy uses its own save for its own designs. (The scenario check was added on 2026-11-24, step 6d.)
 - The "waiting" status line was not seen on screen in the test (headless copies draw no window); the log lines were.
@@ -188,11 +188,34 @@ Known gaps
 - Only units, positions and battles are replayed. Production, research and base changes simply appear when the end state is loaded.
 - The replay can't be skipped yet (a button to skip would be a small addition).
 
+### Negotiation and research (2026-11-25, session 7, step 6f)
+Branch `negotiation-research`. The map is in CAMPAIGN_RAM_MAP.md ("Negotiation and research"); a plain-words guide to the four Negotiation choices for the tutorials is in NEGOTIATION_GUIDE.md.
+
+**What was wrong before**: turn files carried funds but not negotiation, so each copy kept its own blueprints, investments and goodwill (lost on a new device), each copy's companies developed blueprints at their own random pace, and the CPU's negotiation spent the waiting side's funds every End Turn (hot-seat put the funds back, but the CPU still "owned" blueprints on each copy).
+
+**Built (`src/negotiation_sync.c`, hooks in `CMakeLists.txt`):**
+- **The CPU's negotiation is off** in hot-seat and online games: `0x80049828` (buys blueprints), `0x80049F44` (orders optimizations), `0x8004A214` (invests in R&D) and `0x80049CA4` (buys a blueprint as it is finished) are skipped. Single-player campaigns are unchanged.
+- **Each player has a ledger**: blueprints they bought, their R&D payments and bonuses, their optimizations, their goodwill and purchases at each company, their Information requests. The rest is the **world**: which blueprints exist, are being developed (turns left, chance) or are on sale, and which R&D slot holds which. On each copy RAM holds the world, the player's own ledger, and the opponent's ownership and R&D payments shown as Drakken's (so Information's "Drakken purchased our..." means the opponent did).
+- **The world moves on once a round**, on player A's half (side A in hot-seat). On B's half the game's End Turn step runs as usual (B's optimizations count down, B's goodwill fades) and the world is put back afterwards, so development is as fast as in the original game, not twice as fast. When a blueprint B paid for is finished on A's half, B's bonus (10% or 20% off, flag 0x0800, company flag) is worked out the way the game does it for the player.
+- **Turn files are version 4**: a 4008-byte section at the end ("NEG1", the world, the receiver's ledger, the sender's ledger). About 47 KB a file (was 43 KB; the relay's limit is 64 KB). Version 2-3 files are still read (negotiation then stays as it is on that copy). **Both players need the new build** (an older build refuses version 4).
+- **Hot-seat** swaps the ledgers with the sides.
+- Funds spent in Negotiation travel with the funds, as before.
+
+**Tested**
+- Simulator (`turnsim/run.sh`): a stand-in research step, A buys a blueprint, B pays for one in R&D; A owns it and B sees it as the opponent's; B's payment earns B (not A) 20% off when it is finished on A's half; the CPU's negotiation never runs; all earlier cases (restarts, own file, empty folder, relay) still pass with the new section.
+- **Real game, two copies, local relay** (new `tools/research/negotiation_demo.py`), through the game's own screens: A bought CP-478FX (Kawashima Corp) on turn 1 and B's copy showed it as the opponent's; B paid 5000 towards Golle 1800C1 (Union Claude) and A's copy showed it as the opponent's payment, with the same 2 turns saved on both copies; over 2 rounds every blueprint in development moved on exactly 2 turns; the waiting side's funds were never touched; both copies had identical worlds throughout; B closed and restarted and its blueprints, payments and goodwill came back from its turn file.
+
+Known gaps
+- The **market stance** (`0x800DF394`, prices +-15% for winning or losing) is worked out on each copy from its own battle counters; not synced. Small price differences between the two players are possible.
+- A development delay rolled on A's half only shows "delayed" (flag 0x8000) to A, even if B also paid for it.
+- The "reserved for the investor" window (+03 = 0x40) only keeps the CPU from buying; between two players it does nothing (as before, both can buy any blueprint on sale).
+- Not tested: Android (same code), a real window.
+
 ### Saves and memory cards: mapped (2026-11-22)
 A campaign save is one 5-block file whose body is a straight copy of the campaign tables in RAM (cards, units, bases, OKEs, globals). No checksum found. A single design is one 1152-byte record at a known offset. See VS_MODE_AND_SAVES.md.
 
 ### Still to map
-- Negotiation/research state.
+- ~~Negotiation/research state~~ (done 2026-11-25).
 
 ### Other parts
 - **Notifications**: no push server at first. The Android app checks for new turn files in the background (about every 15 minutes) and posts a local notification. Desktop checks when the launcher opens.
@@ -235,7 +258,25 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 5. ~~Turn files: capture orders and battle results on one copy, apply them on a second copy~~ (done 2026-11-22, `src/turn_files.c`; tested in the real game 2026-11-23).
 6. ~~Waiting without freezing the game~~ and ~~storage: the turn relay~~ (done 2026-11-23). ~~Launcher Online screen, closing after sending, catching up on start (also from the relay on a new device), desktop "your turn" check~~ (done 2026-11-24). ~~Scenario check~~ (done 2026-11-24). ~~Real relay test~~ (done 2026-11-24, session 4). ~~Android: Online screen and notifications~~ (built 2026-11-24, session 5, PR #9). ~~Device test~~ (passed 2026-11-24, owner).
 7. ~~Optional: visual replay of the enemy's turn~~ (done 2026-11-24, session 6, branch `enemy-replay`; battles are fought again from the same seed).
+7b. ~~Negotiation and research: map, stop the CPU's, carry both players' in the turn files~~ (done 2026-11-25, session 7, branch `negotiation-research`).
 8. Later: Options A and B (the card and save layout they need is now mapped).
+
+## Session status (chat B, 2026-11-25, session 7)
+**Done**
+- PR #11 (replay) had already been merged by the hub.
+- **Negotiation and research mapped** (CAMPAIGN_RAM_MAP.md): the six companies, the blueprint state table, R&D slots, company records, the four choices with their costs and RAM effects, prices, the End Turn routine and what the CPU does there. Checked live (purchase, R&D payment, optimization, Information, End Turns).
+- **Plain-words guide** for chat A's tutorials: NEGOTIATION_GUIDE.md (also the project doc "claude/Negotiation Guide").
+- **Online**: the CPU's negotiation is off in versus games; turn files version 4 carry the world and both players' ledgers (step 6f above). Simulator and a real two-copy test pass; `replay_demo.py` and `online_demo.py` re-run.
+
+**Next**
+- Hub: merge `negotiation-research`. Release note: both players must update again (version-4 turn files).
+- Owner: Android test APK with the replay and negotiation (needs `carnageheart.keystore` attached in a chat B session, and the devkit release).
+- Chat A: tutorials can use NEGOTIATION_GUIDE.md.
+- Small: skip button for the replay; monochrome notification icon; maybe sync the market stance.
+- Later: Options A (live VS) and B (card sharing).
+
+**Blocked**
+- Test APK: no keystore attached this session.
 
 ## Session status (chat B, 2026-11-24, session 6)
 **Done**

@@ -71,7 +71,7 @@
  * sent: the bottom line says which scenario to start, and online play is
  * off until the game is restarted (the map plays as a normal campaign).
  *
- * File layout (version 2, little-endian), 52-byte header then the body:
+ * File layout (version 4, little-endian), 52-byte header then the body:
  *    0  4  "CHTF"
  *    4  2  version (1)
  *    6  1  sender role (0 = A, 1 = B)
@@ -102,7 +102,15 @@
  *          start tables (same layout as the tables above, receiver's point
  *              of view): the state when the sender pressed End Turn, after
  *              their orders and before any unit moved
- * Version 2 files are still read (no replay).
+ *          version 4 adds, at the end, negotiation and research
+ *          (negotiation_sync.c, 4008 bytes): "NEG1", the world (297
+ *              blueprints x 4, 32 R&D slots x 2), the receiver's ledger,
+ *              the sender's ledger (297 x 4, 32 investments x 4,
+ *              6 companies x 8, 6 "asked" counters x 2)
+ * Version 2-3 files are still read (2: no replay; 2-3: negotiation stays as
+ * it is on this copy). Header bytes 4-5 say the version; a file's
+ * file_version must be at most TF_VERSION, so an older build refuses
+ * version 4 ("update the game").
  *
  * Replay ("watch what the enemy did", version 3): when the opponent's turn
  * file arrives, the game first puts the start tables in RAM and runs the
@@ -146,7 +154,7 @@
 #define UNIT_SIZE       22u
 #define UNIT_COUNT      64
 
-#define TF_VERSION      3
+#define TF_VERSION      4
 #define TF_MIN_VERSION  2         /* oldest version still read (no replay) */
 #define TF_HEADER       52u
 
@@ -163,7 +171,13 @@
 #define TF_MAX_BATTLES  64
 #define TF_MAX_BODY     (TF_TABLES + TF_CARDS + 1u + TF_MAX_ORDERS * TF_ORDER_SIZE + \
                          1u + TF_MAX_BATTLES * TF_BATTLE_SIZE + \
-                         TF_MAX_BATTLES * 4u + TF_TABLES)
+                         TF_MAX_BATTLES * 4u + TF_TABLES + TF_NEG_MAX)
+#define TF_NEG_MAX      4096u     /* negotiation section (negotiation_sync.c) */
+
+/* negotiation_sync.c */
+uint32_t ch_neg_size(void);
+uint32_t ch_neg_write(CPUState *cpu, uint8_t *p);
+int ch_neg_read(CPUState *cpu, const uint8_t *p, uint32_t n, int own);
 
 /* turn_relay.c: keeps the folder in step with the online relay. */
 int ch_relay_start(int role, const char *dir, char *dir_out, size_t dir_n);
@@ -232,6 +246,7 @@ int ch_turns_active(void)
 /* On, without switching it on: for rand() (turn_replay.c), which the game
  * calls long before the map opens. */
 int ch_turns_on(void) { return g_on > 0; }
+int ch_turns_role(void) { return g_role; }
 
 /* ---- little helpers ---------------------------------------------------- */
 
@@ -479,6 +494,9 @@ static size_t build_file(CPUState *cpu, int game_over)
     else memcpy(p, body, TF_TABLES);
     p += TF_TABLES;
     g_have_start_raw = 0;
+    /* Version 4: negotiation and research (the world and both ledgers). */
+    if (ch_neg_size() <= TF_NEG_MAX)
+        p += ch_neg_write(cpu, p);
     const uint32_t body_len = (uint32_t)(p - body);
 
     /* The game counted the turn at the start of End Turn. A's turn n and B's
@@ -605,6 +623,23 @@ static void log_what_happened(const uint8_t *orders, int norders, const uint8_t 
     }
 }
 
+/* Version 4: the negotiation section is the last part of the body. own: my
+ * own file, turned back. Without one (version 2-3) negotiation stays as it
+ * is on this copy. */
+static uint32_t neg_len(const uint8_t *buf, uint32_t len)
+{
+    const uint32_t n = ch_neg_size();
+    if (get16(buf + 4) < 4 || len < n || memcmp(buf + TF_HEADER + len - n, "NEG1", 4) != 0) return 0;
+    return n;
+}
+
+static void load_negotiation(CPUState *cpu, int own)
+{
+    const uint32_t len = get32(g_buf + 44), n = neg_len(g_buf, len);
+    if (n && ch_neg_read(cpu, g_buf + TF_HEADER + len - n, n, own))
+        fprintf(stderr, "[turns] negotiation and research loaded%s\n", own ? " (my own file)" : "");
+}
+
 /* Write a checked turn file (in g_buf) into RAM. Returns its game-over flag. */
 static int load_file(CPUState *cpu, uint32_t seq, uint32_t len)
 {
@@ -638,6 +673,7 @@ static int load_file(CPUState *cpu, uint32_t seq, uint32_t len)
             (unsigned)seq, cpu->read_word(GP_TURN), cpu->read_word(GP_FUNDS_PLAYER),
             cpu->read_word(GP_FUNDS_CPU), (h[7] & 1) ? ", game over" : "");
     log_what_happened(orders, norders, battles, nbattles);
+    load_negotiation(cpu, 0);
     return h[7] & 1;
 }
 
@@ -689,7 +725,8 @@ static const uint8_t *replay_parts(const uint8_t *buf, uint32_t len, const uint8
                                    const uint8_t **seeds, int *nbattles)
 {
     if (get16(buf + 4) < 3) return NULL;
-    const uint8_t *p = buf + TF_HEADER + TF_TABLES + TF_CARDS, *end = buf + TF_HEADER + len;
+    const uint8_t *p = buf + TF_HEADER + TF_TABLES + TF_CARDS,
+                  *end = buf + TF_HEADER + len - neg_len(buf, len);
     if (p >= end) return NULL;
     const int norders = *p++;
     p += norders * TF_ORDER_SIZE;
@@ -1039,6 +1076,7 @@ static int load_own_file(CPUState *cpu, uint32_t seq)
     fprintf(stderr, "[turns] loaded my own turn file %u: turn %u, funds %u (opponent %u)\n",
             (unsigned)seq, cpu->read_word(GP_TURN), cpu->read_word(GP_FUNDS_PLAYER),
             cpu->read_word(GP_FUNDS_CPU));
+    load_negotiation(cpu, 1);
     return 1 + (h[7] & 1);
 }
 

@@ -52,6 +52,19 @@ static CPUState C = { .read_word = rw, .write_word = ww, .read_half = rh,
 void func_8001B8EC(CPUState *); void func_8001C268(CPUState *); void func_8001BCB0(CPUState *);
 void func_8008A2B8(CPUState *); void func_8001CF48(CPUState *); void func_80035CD4(CPUState *);
 void func_80035988(CPUState *); void func_800333F8(CPUState *); void func_8008E1E4(CPUState *);
+void func_8004BBB8(CPUState *); void func_800566F4(CPUState *); void func_80049828(CPUState *);
+void func_80049F44(CPUState *); void func_8004A214(CPUState *); void func_80049CA4(CPUState *);
+
+/* Negotiation (negotiation_sync.c): a few blueprints. Part 0 is a stock
+ * blueprint both own, part 1 is on sale, part 2 is in R&D in slot 0
+ * (3 turns left), part 3 starts in R&D in slot 1 (6 turns left). Part 2's
+ * price is 5000 (parts table +0x1C). */
+#define NEG_PARTS 0x80136100u
+#define NEG_SLOTS 0x801365A0u
+#define NEG_COMPS 0x801360CCu
+#define P(i) (NEG_PARTS + (i) * 4u)
+#define SL(i) (NEG_SLOTS + (i) * 12u)
+static int g_cpu_neg_ran;
 
 /* The game routines the hooks may "call" (cpu->pc set, return address in
  * $ra): VSync while waiting; the unit steps while replaying the opponent's
@@ -158,6 +171,11 @@ void ch_remote_lle_func_8001B8EC(CPUState *c)
     if (c->pc != 0x1234) { fprintf(stderr, "SIM: brain hook did not return\n"); exit(2); }
     move_units(32, 64);
     c->pc = 0; func_8001BCB0(c);
+    /* research and negotiation (0x8004BBB8), then player production
+     * (0x800566F4), which the negotiation hook uses as its "after" step */
+    c->pc = 0; c->gpr[31] = 0x1236; func_8004BBB8(c);
+    if (c->pc != 0 && c->pc != 0x1236) { fprintf(stderr, "SIM: research hook lost its way\n"); exit(2); }
+    c->pc = 0; func_800566F4(c);
     /* production / research: both funds change, both sides' bases get fuel */
     ww(GP_FUNDS_PLAYER, rw(GP_FUNDS_PLAYER) - 100);
     ww(GP_FUNDS_CPU, rw(GP_FUNDS_CPU) - 7);
@@ -180,6 +198,35 @@ void host_osd_set_status(const char *msg)
     if (*msg) printf("STATUS %s\n", msg);
 }
 void ch_remote_lle_func_800333F8(CPUState *c) { (void)c; }
+/* The CPU's negotiation: must not run in a versus game. */
+static void cpu_neg(CPUState *c) { g_cpu_neg_ran++; ww(GP_FUNDS_CPU, rw(GP_FUNDS_CPU) - 1000); wh(P(1), rh(P(1)) | 4); c->gpr[2] = 1000; c->pc = c->gpr[31]; }
+void ch_remote_lle_func_80049828(CPUState *c) { cpu_neg(c); }
+void ch_remote_lle_func_80049F44(CPUState *c) { cpu_neg(c); }
+void ch_remote_lle_func_8004A214(CPUState *c) { cpu_neg(c); }
+void ch_remote_lle_func_80049CA4(CPUState *c) { cpu_neg(c); }
+/* The companies' research: each blueprint in R&D gets a turn closer; at 0
+ * it goes on sale (the slot is freed). Then the game calls the CPU's
+ * negotiation. */
+void ch_remote_lle_func_8004BBB8(CPUState *c)
+{
+    for (int s = 0; s < 32; s++) {
+        int16_t part = (int16_t)rh(SL(s));
+        if (part < 0) continue;
+        uint16_t f = rh(P(part));
+        uint8_t t = rb(P(part) + 2);
+        if (!(f & 8)) continue;
+        if ((t & 63) > 1) { wb(P(part) + 2, (uint8_t)(t - 1)); continue; }
+        wh(P(part), (uint16_t)((f | 1) & ~8)); wb(P(part) + 2, (uint8_t)(t & 0xC0)); wb(P(part) + 3, 0);
+        wh(SL(s), 0xFFFF);
+    }
+    const uint32_t ra = c->gpr[31];
+    c->pc = 0; c->gpr[31] = 0x4343; func_80049828(c);
+    c->pc = 0; c->gpr[31] = 0x4343; func_80049F44(c);
+    c->pc = 0; c->gpr[31] = 0x4343; func_8004A214(c);
+    c->pc = 0; c->gpr[31] = 0x4343; func_80049CA4(c);
+    c->gpr[31] = ra; c->pc = 0;
+}
+void ch_remote_lle_func_800566F4(CPUState *c) { (void)c; }
 void ch_remote_lle_func_8001C268(CPUState *c) { g_cpu_ai_ran++; c->pc = c->gpr[31]; }
 void ch_remote_lle_func_8001BCB0(CPUState *c) { (void)c; }
 void ch_remote_lle_func_8008A2B8(CPUState *c) { (void)c; }
@@ -224,6 +271,13 @@ static void init(int role)
 {
     memset(ram, 0, sizeof ram);
     ww(PTR_PLAYER_CARD, CARDS); ww(PTR_OKE_TABLE, OKES); ww(PTR_BASE_TABLE, BASES); ww(PTR_UNIT_TABLE, UNITS);
+    ww(0x800DFFFCu, NEG_PARTS); ww(0x800DFF6Cu, NEG_SLOTS); ww(0x800E00B4u, NEG_COMPS);
+    for (int s = 0; s < 32; s++) wh(SL(s), 0xFFFF);
+    wh(P(0), 7); wh(P(1), 1);
+    wh(P(2), 8); wb(P(2) + 2, 3); wb(P(2) + 3, 100); wh(SL(0), 2);
+    wh(P(3), 8); wb(P(3) + 2, 6); wb(P(3) + 3, 90); wh(SL(1), 3);
+    ww(0x800C0C7Cu + 2 * 36u + 0x1Cu, 5000);
+    wh(0x800BD0ACu + 10, 2); wh(0x800BD0ACu + 12, 0xFFFF);   /* company 0 sells part 2 */
     ww(GP_TURN, 1); ww(GP_TURN2, 1); ww(GP_FUNDS_PLAYER, 500000); ww(GP_FUNDS_CPU, 300000);
     if (getenv("SIM_SCENARIO")) ww(0x800DF384u, (uint32_t)atoi(getenv("SIM_SCENARIO")));
     if (getenv("SIM_MAP")) ww(0x800DF388u, (uint32_t)atoi(getenv("SIM_MAP")));
@@ -250,6 +304,16 @@ static void play(void)
     } else if (t == 3 && rb(U(0)) == 1) {
         wh(U(0) + 8, 99);   /* a re-order: home cell changes */
     }
+    /* Negotiation: A buys blueprint 1 on turn 1; B invests 9000 in
+     * blueprint 2 (slot 0) on turn 1, enough for 20% off when it is done. */
+    if (t == 1 && g_role == 0) {
+        wh(P(1), rh(P(1)) | 2); ww(GP_FUNDS_PLAYER, rw(GP_FUNDS_PLAYER) - 4000);
+        wh(NEG_COMPS + 0, rh(NEG_COMPS + 0) + 4); wh(NEG_COMPS + 2, rh(NEG_COMPS + 2) + 1);
+    }
+    if (t == 1 && g_role == 1 && (int16_t)rh(SL(0)) == 2) {
+        ww(SL(0) + 4, rw(SL(0) + 4) + 9000); wh(P(2), rh(P(2)) | 0x2000);
+        ww(GP_FUNDS_PLAYER, rw(GP_FUNDS_PLAYER) - 9000);
+    }
 }
 
 /* One side of the board, numbered from that side's own point of view. */
@@ -267,6 +331,12 @@ static void side(char *out, int mine)
         if (rb(O(k)) == own) pos += sprintf(out + pos, "%d:%d,", k, (int16_t)rh(O(k) + 6));
     pos += sprintf(out + pos, " bases=");
     for (int b = 0; b < 16; b++) if (rb(B(b)) == own) pos += sprintf(out + pos, "%d,", b);
+    pos += sprintf(out + pos, " owns=");
+    for (int i = 0; i < 4; i++) if (rh(P(i)) & (mine ? 2 : 4)) pos += sprintf(out + pos, "%d,", i);
+    pos += sprintf(out + pos, " invested=");
+    for (int s = 0; s < 2; s++) pos += sprintf(out + pos, "%u,", rw(SL(s) + (mine ? 4 : 8)));
+    pos += sprintf(out + pos, " rd=");
+    for (int i = 0; i < 4; i++) pos += sprintf(out + pos, "%d:%s%d,", i, (rh(P(i)) & 1) ? "sale" : "t", rb(P(i) + 2) & 63);
 }
 
 int main(int argc, char **argv)
@@ -299,9 +369,12 @@ int main(int argc, char **argv)
         func_8001B8EC(&C);
         print_side("POST", 1);
         print_side("POST", 0);
+        printf("NEG %c part2 flags=%04x discount=%d part1 mine=%d\n", "AB"[role], rh(P(2)),
+               rb(P(2) + 2) >> 6, (rh(P(1)) & 2) != 0);
         if (rw(GP_FUNDS_PLAYER) == 0) break;
     }
     printf("END %c cpu_ai_ran=%d wrong_mover=%d frames_waited_last=%ld replay_moves=%ld\n", "AB"[role],
            g_cpu_ai_ran, g_wrong_mover, g_frames_waited, g_replay_moves);
-    return (g_cpu_ai_ran || g_wrong_mover) ? 3 : 0;
+    if (g_cpu_neg_ran) printf("CPU negotiation ran %d time(s)\n", g_cpu_neg_ran);
+    return (g_cpu_ai_ran || g_wrong_mover || g_cpu_neg_ran) ? 3 : 0;
 }

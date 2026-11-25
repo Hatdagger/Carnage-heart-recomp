@@ -43,6 +43,7 @@ extern "C" {
 
 #ifdef _WIN32
 #  include <windows.h>
+#  include <shellapi.h>
 #else
 #  include <spawn.h>
 #  include <sys/stat.h>
@@ -404,7 +405,9 @@ bool protected_path(const std::string& rel) {
     for (const char* d : { "build-release/", "generated/", "disc/", "saves/", "cache/",
                            "netplay/", "Update/", ".git/",
                            /* online games (keys + turn files), Android build output */
-                           "online-turns/", "build-android/", "build-android-work/" })
+                           "online-turns/", "build-android/", "build-android-work/",
+                           /* tutorial pictures made on this PC from the player's disc */
+                           "tutorials/local/" })
         if (starts_with(rel, d)) return true;
     /* Mods the release ships are replaced and added; the player's are not. */
     if (starts_with(rel, "mods/")) {
@@ -547,7 +550,7 @@ bool start_quick_rebuild(const fs::path& root) {
  * nobody thought of errs on the side of the full rebuild. */
 bool compile_only(const std::string& rel) {
     for (const char* d : { "launcher/", "cmake/", "src/", "assets/", "mods/", "docs/",
-                           "recomp-ui/", "scripts/", "android/" })
+                           "recomp-ui/", "scripts/", "android/", "tutorials/" })
         if (starts_with(rel, d)) return true;
     for (const char* f : { "CMakeLists.txt", "README.md", "README-SETUP.txt", "VERSION",
                            "psx_game_version.txt", kSetupExe,
@@ -934,6 +937,62 @@ bool start_android_build(std::string* why) {
             return true;
     }
     if (why) *why = "NO TERMINAL FOUND: RUN build-android-app.sh";
+    return false;
+#endif
+}
+
+/* ---- Tutorials ------------------------------------------------------------- */
+
+namespace {
+fs::path tutorials_page() {
+    const fs::path root = kit_root();
+    if (root.empty()) return {};
+    std::error_code ec;
+    const fs::path page = root / "tutorials" / "index.html";
+    return fs::is_regular_file(page, ec) ? page : fs::path();
+}
+} /* namespace */
+
+bool tutorials_available() {
+    return !tutorials_page().empty();
+}
+
+bool open_tutorials(std::string* why) {
+    const fs::path page = tutorials_page();
+    if (page.empty()) {
+        if (why) *why = "THE TUTORIALS ARE NOT IN THIS VERSION";
+        return false;
+    }
+#ifdef _WIN32
+    /* The default browser, through the shell (same as double-clicking it). */
+    const HINSTANCE h = ShellExecuteW(nullptr, L"open", page.wstring().c_str(),
+                                      nullptr, nullptr, SW_SHOWNORMAL);
+    if ((INT_PTR)h <= 32) {
+        if (why) *why = "COULD NOT OPEN THE BROWSER. OPEN tutorials\\index.html IN THE GAME FOLDER";
+        return false;
+    }
+    return true;
+#else
+    /* xdg-open (every desktop Linux, SteamOS desktop mode), else a browser. */
+    const std::string url = "file://" + page.string();
+    for (const char* exe : { "xdg-open", "gio", "firefox", "chromium", "google-chrome" }) {
+        std::vector<std::string> args = { exe };
+        if (std::strcmp(exe, "gio") == 0) args.push_back("open");
+        args.push_back(url);
+        std::vector<char*> argv;
+        for (std::string& a : args) argv.push_back(a.data());
+        argv.push_back(nullptr);
+        /* Quiet: browsers print a lot on start. */
+        posix_spawn_file_actions_t fa;
+        posix_spawn_file_actions_init(&fa);
+        posix_spawn_file_actions_addopen(&fa, 1, "/dev/null", O_WRONLY, 0);
+        posix_spawn_file_actions_addopen(&fa, 2, "/dev/null", O_WRONLY, 0);
+        pid_t pid = 0;
+        const int rc = posix_spawnp(&pid, exe, &fa, nullptr, argv.data(), environ);
+        posix_spawn_file_actions_destroy(&fa);
+        if (rc == 0) return true;
+    }
+    if (why) *why = "NO WEB BROWSER FOUND. OPEN tutorials/index.html IN THE GAME FOLDER";
     return false;
 #endif
 }

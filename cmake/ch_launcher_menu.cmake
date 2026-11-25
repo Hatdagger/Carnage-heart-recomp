@@ -97,7 +97,7 @@ function(ch_add_launcher_menu TGT)
         "${CMAKE_CURRENT_SOURCE_DIR}/launcher/ch_apk_share.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/launcher/third_party/qrcodegen/qrcodegen.c")
     if(WIN32)
-        target_link_libraries(${TGT} PRIVATE ws2_32)
+        target_link_libraries(${TGT} PRIVATE ws2_32 shell32)
     endif()
     set(_ch_online "${CMAKE_CURRENT_SOURCE_DIR}/launcher/ch_online.cpp")
     target_sources(${TGT} PRIVATE "${_ch_online}")

@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carnage Heart Recompiled: Tutorials</title>
+<!--
+  Carnage Heart Recompiled tutorials. One self-contained page: no internet,
+  no files beside it, nothing from the game disc or the manual. Every picture
+  is drawn here in SVG, every word is ours. Opened from the launcher's
+  TUTORIALS row (tutorials/index.html in the game folder) and also published
+  as a GitHub page.
+
+  Controls: mouse / touch, keyboard (arrows, Enter, Esc) or a controller
+  (D-pad / stick, A = select, B = back, LB / RB = previous / next).
+-->
+<style>
+:root{
+  --bg:#050a08; --grid:rgba(24,52,36,.45); --panel:rgba(9,20,15,.92); --line:#2c583e;
+  --text:#b8d6c4; --bright:#faf6de; --dim:#608670; --hi:#f2b028; --on:#64e28c;
+  --warn:#e45c3c; --chipbg:#3a3f47; --chipedge:#9aa3ad;
+  --mono: "DejaVu Sans Mono","Consolas","Menlo",monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:15px/1.5 var(--mono);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:32px 32px}
+a{color:var(--hi)}
+header{display:flex;align-items:baseline;gap:16px;padding:18px 24px 10px;border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:22px;color:#def0e4;letter-spacing:.08em}
+header .sub{color:var(--dim);font-size:12px;letter-spacing:.1em}
+header .spacer{flex:1}
+main{max-width:1080px;margin:0 auto;padding:18px 20px 60px}
+.btn{display:inline-block;background:transparent;color:var(--text);border:1px solid var(--line);
+  font:inherit;font-size:13px;letter-spacing:.06em;padding:6px 14px;cursor:pointer;text-transform:uppercase}
+.btn:hover,.btn.focus{border-color:var(--hi);color:var(--hi)}
+.btn.primary{border-color:var(--hi);color:var(--hi)}
+.btn[disabled]{opacity:.4;cursor:default}
+.panel{background:var(--panel);border:1px solid var(--line);position:relative;padding:16px}
+.panel>.cap{position:absolute;top:-9px;left:12px;background:var(--bg);color:var(--dim);font-size:11px;padding:0 6px;letter-spacing:.1em}
+h2{color:var(--bright);font-size:18px;margin:0 0 8px;letter-spacing:.06em}
+h3{color:var(--hi);font-size:14px;margin:14px 0 6px;letter-spacing:.06em;text-transform:uppercase}
+.dim{color:var(--dim)} .hi{color:var(--hi)} .on{color:var(--on)} .warn{color:var(--warn)}
+/* home */
+.intro{margin:6px 0 18px;max-width:760px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.card{cursor:pointer;min-height:150px}
+.card:hover,.card.focus{border-color:var(--hi)}
+.card .num{color:var(--hi);font-size:12px;letter-spacing:.12em}
+.card h2{margin-top:4px}
+.card p{margin:4px 0 0;font-size:13px}
+.card.soon{opacity:.55;cursor:default}
+/* lesson */
+.tabs{display:flex;gap:8px;margin:10px 0 14px;flex-wrap:wrap}
+.tab.sel{background:var(--hi);color:#06110a;border-color:var(--hi)}
+.slide{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px}
+@media (max-width:820px){.slide{grid-template-columns:1fr}}
+.pic{position:relative;background:#030705;border:1px solid var(--line)}
+.pic svg{display:block;width:100%;height:auto}
+.spot{position:absolute;border:2px dashed rgba(242,176,40,.7);cursor:pointer;border-radius:3px}
+.spot:hover,.spot.sel{border-style:solid;border-color:var(--hi);background:rgba(242,176,40,.12)}
+.spot .dot{position:absolute;right:-9px;top:-9px;width:18px;height:18px;border-radius:9px;background:var(--hi);color:#06110a;font-size:11px;line-height:18px;text-align:center;font-weight:bold}
+.words p{margin:0 0 10px}
+.note{border-left:3px solid var(--hi);padding:6px 10px;margin-top:10px;background:rgba(242,176,40,.06);min-height:44px}
+.nav{display:flex;align-items:center;gap:10px;margin-top:14px}
+.dots{display:flex;gap:6px;flex:1;justify-content:center}
+.dots span{width:9px;height:9px;border:1px solid var(--line);display:inline-block}
+.dots span.sel{background:var(--hi);border-color:var(--hi)}
+.hint{color:var(--dim);font-size:11px;letter-spacing:.06em;margin-top:8px}
+/* replica menus */
+.rep{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media (max-width:820px){.rep{grid-template-columns:1fr}}
+.gmenu{background:#18205a;border:2px solid #4a55b8;border-radius:4px;padding:8px 10px;min-width:220px;display:inline-block;box-shadow:inset 0 0 0 2px #0e1440}
+.gmenu .title{color:#c9d0ff;font-size:13px;border-bottom:1px solid #4a55b8;margin-bottom:6px;padding-bottom:4px;letter-spacing:.06em}
+.gmenu .it{color:#e7ebff;padding:3px 8px;cursor:pointer;font-size:17px;border:2px solid transparent}
+.gmenu .it:hover,.gmenu .it.focus{border-color:#fff}
+.gmenu .it.sel{background:#3442a8;border-color:#fff}
+.gmenu .it.off{color:#7c83b8}
+.crumbs{color:var(--dim);font-size:12px;margin-bottom:8px}
+.crumbs b{color:var(--hi);font-weight:normal}
+.topbar{background:linear-gradient(#2b3cb0,#162074);color:#e7ebff;border-radius:14px;padding:4px 18px;display:flex;gap:28px;font-size:15px;margin-bottom:12px}
+table.gt{border-collapse:collapse;width:100%;font-size:14px;color:#e7ebff;background:#18205a}
+table.gt th,table.gt td{border:1px solid #4a55b8;padding:4px 8px;text-align:left}
+table.gt th{color:#c9d0ff;font-weight:normal}
+table.gt tr.locked td{color:#c0505a}
+table.gt tr.pick{cursor:pointer}
+table.gt tr.pick:hover td,table.gt tr.pick.focus td{background:#2a3590}
+select,input[type=number]{background:#0b1611;color:var(--bright);border:1px solid var(--line);font:inherit;padding:3px 6px}
+/* chip grid */
+.cg{display:grid;grid-template-columns:232px minmax(0,1fr) 250px;gap:12px}
+@media (max-width:980px){.cg{grid-template-columns:1fr}}
+.palette{display:grid;grid-template-columns:repeat(4,44px);gap:6px}
+.palette .chip{cursor:grab}
+.palette .chip.sel{outline:2px solid var(--hi);outline-offset:2px}
+.board{display:grid;gap:4px;background:#1b1d22;padding:8px;border:1px solid var(--line);width:max-content;max-width:100%;overflow:auto}
+.cell{width:62px;height:62px;position:relative;background:#26292f;clip-path:polygon(25% 0,75% 0,100% 25%,100% 75%,75% 100%,25% 100%,0 75%,0 25%);cursor:pointer}
+.cell.sel{background:#5a4a1a}
+.cell.run{background:#2f6a3f}
+.cell svg{position:absolute;inset:0;width:100%;height:100%}
+.chip{width:44px;height:44px;position:relative}
+.chip svg{width:100%;height:100%}
+.sit label{display:block;margin:4px 0;cursor:pointer}
+.log{height:170px;overflow:auto;background:#030705;border:1px solid var(--line);padding:6px 8px;font-size:12px}
+.log div{white-space:pre-wrap}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+/* hex picker */
+.hexwrap svg{width:100%;height:auto;display:block}
+.hexwrap polygon{cursor:pointer}
+.hexwrap text{pointer-events:none}
+footer{color:var(--dim);font-size:11px;text-align:center;padding:20px}
+:focus-visible{outline:2px solid var(--hi);outline-offset:2px}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="htitle">CARNAGE HEART</h1><span class="sub" id="hsub">TUTORIALS</span>
+  <span class="spacer"></span>
+  <button class="btn" id="homeBtn" hidden>&lt; ALL LESSONS</button>
+</header>
+<main id="app"></main>
+<footer>Carnage Heart Recompiled tutorials. Written and drawn for this project; nothing here is taken from the game disc or its manual.
+Mouse, touch, keyboard (arrows, Enter, Esc) or controller (D-pad, A, B, LB / RB).</footer>
+
+<script>
+"use strict";
+/* ======================================================================
+   Drawing helpers (all pictures are plain SVG made here)
+   ====================================================================== */
+const C = {bg:"#030705", line:"#2c583e", text:"#b8d6c4", dim:"#608670", hi:"#f2b028",
+  on:"#64e28c", warn:"#e45c3c", menu:"#18205a", menuEdge:"#4a55b8", menuText:"#e7ebff",
+  chip:"#3a3f47", chipEdge:"#9aa3ad", green:"#3cc46a", red:"#e0485a", steel:"#7f8a94", dark:"#1b1d22"};
+
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function svg(w,h,body){return `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans Mono,Consolas,monospace">${body}</svg>`;}
+function txt(x,y,s,o={}){return `<text x="${x}" y="${y}" fill="${o.fill||C.text}" font-size="${o.size||14}" text-anchor="${o.anchor||"start"}" ${o.weight?`font-weight="${o.weight}"`:""}>${esc(s)}</text>`;}
+function rect(x,y,w,h,o={}){return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${o.rx||0}" fill="${o.fill||"none"}" stroke="${o.stroke||"none"}" stroke-width="${o.sw||1.5}" ${o.dash?`stroke-dasharray="${o.dash}"`:""}/>`;}
+function arrow(x1,y1,x2,y2,col,sw=3){
+  const a=Math.atan2(y2-y1,x2-x1), h=10;
+  const p1=[x2-h*Math.cos(a-0.45),y2-h*Math.sin(a-0.45)], p2=[x2-h*Math.cos(a+0.45),y2-h*Math.sin(a+0.45)];
+  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width="${sw}"/><polygon points="${x2},${y2} ${p1} ${p2}" fill="${col}"/>`;
+}
+/* A game-style menu box. */
+function menuBox(x,y,title,items,sel=-1,w=210){
+  const h=34+items.length*26;
+  let s=rect(x,y,w,h,{fill:C.menu,stroke:C.menuEdge,sw:2,rx:4});
+  if(title) s+=txt(x+10,y+20,title,{fill:"#c9d0ff",size:13})+`<line x1="${x+6}" y1="${y+27}" x2="${x+w-6}" y2="${y+27}" stroke="${C.menuEdge}"/>`;
+  items.forEach((it,i)=>{
+    const iy=y+(title?34:10)+i*26;
+    if(i===sel) s+=rect(x+8,iy,w-16,23,{fill:"#3442a8",stroke:"#fff",sw:1.5});
+    s+=txt(x+16,iy+17,it,{fill:C.menuText,size:15});
+  });
+  return s;
+}
+/* Status strip like the one at the top of the game's screens. */
+function topStrip(x,y,w,parts){
+  let s=rect(x,y,w,26,{fill:"#1c2a8a",stroke:"#4a55b8",rx:13});
+  let cx=x+18; parts.forEach(p=>{s+=txt(cx,y+18,p,{fill:C.menuText,size:14}); cx+=p.length*9+26;});
+  return s;
+}
+/* A walking machine, drawn simply. kind: legs2 | legs4 | tracks | hover */
+function robot(cx,cy,sc=1,kind="legs2",col="#c9b98a"){
+  const g=[], k=sc;
+  const body=`<rect x="${cx-28*k}" y="${cy-30*k}" width="${56*k}" height="${34*k}" rx="${8*k}" fill="${col}" stroke="#5a4c30" stroke-width="2"/>`;
+  const eye=`<rect x="${cx-12*k}" y="${cy-22*k}" width="${24*k}" height="${7*k}" rx="${3*k}" fill="#e0485a"/>`;
+  const gun=`<rect x="${cx+26*k}" y="${cy-20*k}" width="${30*k}" height="${7*k}" fill="#8a7c58" stroke="#5a4c30"/><rect x="${cx-48*k}" y="${cy-26*k}" width="${20*k}" height="${14*k}" rx="${3*k}" fill="#8a7c58" stroke="#5a4c30"/>`;
+  if(kind==="legs2"){
+    g.push(`<path d="M${cx-16*k} ${cy+4*k} L${cx-24*k} ${cy+30*k} L${cx-14*k} ${cy+52*k} M${cx+16*k} ${cy+4*k} L${cx+24*k} ${cy+30*k} L${cx+14*k} ${cy+52*k}" stroke="#8a7c58" stroke-width="${7*k}" fill="none" stroke-linecap="round"/>`);
+  }else if(kind==="legs4"){
+    g.push(`<path d="M${cx-24*k} ${cy} L${cx-50*k} ${cy+18*k} L${cx-54*k} ${cy+48*k} M${cx+24*k} ${cy} L${cx+50*k} ${cy+18*k} L${cx+54*k} ${cy+48*k} M${cx-10*k} ${cy+4*k} L${cx-20*k} ${cy+48*k} M${cx+10*k} ${cy+4*k} L${cx+20*k} ${cy+48*k}" stroke="#8a7c58" stroke-width="${6*k}" fill="none" stroke-linecap="round"/>`);
+  }else if(kind==="tracks"){
+    g.push(`<rect x="${cx-46*k}" y="${cy+8*k}" width="${92*k}" height="${26*k}" rx="${13*k}" fill="#4b4f55" stroke="#222"/>`);
+    for(let i=0;i<5;i++) g.push(`<circle cx="${cx-34*k+i*17*k}" cy="${cy+21*k}" r="${7*k}" fill="#777"/>`);
+  }else{
+    g.push(`<ellipse cx="${cx}" cy="${cy+18*k}" rx="${52*k}" ry="${11*k}" fill="#4b4f55" stroke="#222"/><ellipse cx="${cx}" cy="${cy+34*k}" rx="${40*k}" ry="${5*k}" fill="rgba(120,200,255,.35)"/>`);
+  }
+  return g.join("")+body+eye+gun;
+}
+function hexPath(cx,cy,r){
+  const p=[]; for(let i=0;i<6;i++){const a=Math.PI/180*(60*i);p.push((cx+r*Math.cos(a)).toFixed(1)+","+(cy+r*Math.sin(a)).toFixed(1));}
+  return p.join(" ");
+}
+/* A small hex map. marks: {"c,r": {fill, label}} */
+function hexMap(x0,y0,cols,rows,r,marks={}){
+  let s="";
+  for(let c=0;c<cols;c++) for(let rr=0;rr<rows;rr++){
+    const cx=x0+c*r*1.5, cy=y0+rr*r*1.732+(c%2?r*0.866:0);
+    const m=marks[c+","+rr];
+    s+=`<polygon points="${hexPath(cx,cy,r-1)}" fill="${m&&m.fill||"#1d3a2a"}" stroke="#3e6e52" stroke-width="1"/>`;
+    if(m&&m.label) s+=txt(cx,cy+5,m.label,{anchor:"middle",size:13,fill:m.tc||"#fff",weight:"bold"});
+  }
+  return s;
+}
+
+/* ----- chips ----- */
+/* id: {name, kind:"act"|"test", glyph, sub} glyph is drawn by chipGlyph(). */
+const CHIPS = {
+  start:{name:"START", kind:"start"},
+  fwd:{name:"Move Forward",kind:"act",glyph:"up"},
+  back:{name:"Move Backward",kind:"act",glyph:"down"},
+  tl:{name:"Turn Left",kind:"act",glyph:"tl"},
+  tr:{name:"Turn Right",kind:"act",glyph:"tr"},
+  ml:{name:"Move Left",kind:"act",glyph:"left"},
+  mr:{name:"Move Right",kind:"act",glyph:"right"},
+  jump:{name:"Jump",kind:"act",glyph:"jump"},
+  mw:{name:"Fire main weapon at an enemy in its area",kind:"act",glyph:"mw"},
+  sw:{name:"Fire one sub-weapon shot (missile) at an enemy in its area",kind:"act",glyph:"sw"},
+  wait:{name:"Wait for action",kind:"act",glyph:"wait"},
+  enemy:{name:"If an enemy is within range, diverge",kind:"test",glyph:"enemy",sub:"100M",sit:"enemy"},
+  missile:{name:"If a missile is within range, diverge",kind:"test",glyph:"missile",sub:"100M",sit:"missile"},
+  fuel:{name:"If fuel is below 50%, diverge",kind:"test",glyph:"fuel",sub:"50%",sit:"fuel"},
+  damage:{name:"If damage is below 50%, diverge",kind:"test",glyph:"dmg",sub:"50%",sit:"damage"},
+  dice:{name:"1 in 5 chance to diverge",kind:"test",glyph:"dice",sub:"1/5",sit:"dice"},
+};
+function chipGlyph(g,cx,cy,s){
+  const W="#eef2f6";
+  switch(g){
+    case "up": return `<polygon points="${cx},${cy-12*s} ${cx+11*s},${cy} ${cx+5*s},${cy} ${cx+5*s},${cy+11*s} ${cx-5*s},${cy+11*s} ${cx-5*s},${cy} ${cx-11*s},${cy}" fill="${W}"/>`;
+    case "down": return `<polygon points="${cx},${cy+12*s} ${cx+11*s},${cy} ${cx+5*s},${cy} ${cx+5*s},${cy-11*s} ${cx-5*s},${cy-11*s} ${cx-5*s},${cy} ${cx-11*s},${cy}" fill="${W}"/>`;
+    case "left": return `<polygon points="${cx-12*s},${cy} ${cx},${cy-11*s} ${cx},${cy-5*s} ${cx+11*s},${cy-5*s} ${cx+11*s},${cy+5*s} ${cx},${cy+5*s} ${cx},${cy+11*s}" fill="${W}"/>`;
+    case "right": return `<polygon points="${cx+12*s},${cy} ${cx},${cy-11*s} ${cx},${cy-5*s} ${cx-11*s},${cy-5*s} ${cx-11*s},${cy+5*s} ${cx},${cy+5*s} ${cx},${cy+11*s}" fill="${W}"/>`;
+    case "tl": return `<path d="M${cx+9*s} ${cy+9*s} A${10*s} ${10*s} 0 1 0 ${cx-9*s} ${cy-2*s}" stroke="${W}" stroke-width="${4*s}" fill="none"/><polygon points="${cx-15*s},${cy-4*s} ${cx-3*s},${cy-4*s} ${cx-9*s},${cy+6*s}" fill="${W}"/>`;
+    case "tr": return `<path d="M${cx-9*s} ${cy+9*s} A${10*s} ${10*s} 0 1 1 ${cx+9*s} ${cy-2*s}" stroke="${W}" stroke-width="${4*s}" fill="none"/><polygon points="${cx+15*s},${cy-4*s} ${cx+3*s},${cy-4*s} ${cx+9*s},${cy+6*s}" fill="${W}"/>`;
+    case "jump": return `<polygon points="${cx},${cy-12*s} ${cx+12*s},${cy} ${cx},${cy+12*s} ${cx-12*s},${cy}" fill="none" stroke="${C.green}" stroke-width="${2.5*s}"/>${txt(cx,cy+5*s,"J",{anchor:"middle",size:13*s,fill:C.green,weight:"bold"})}`;
+    case "mw": return `<rect x="${cx-4*s}" y="${cy-4*s}" width="${16*s}" height="${8*s}" fill="${W}"/><path d="M${cx-6*s} ${cy} l-8 -6 M${cx-6*s} ${cy} l-9 0 M${cx-6*s} ${cy} l-8 6" stroke="${C.hi}" stroke-width="${2*s}"/>`;
+    case "sw": return `<rect x="${cx-2*s}" y="${cy-8*s}" width="${14*s}" height="${16*s}" rx="${2*s}" fill="${W}"/><path d="M${cx-4*s} ${cy} l-8 -6 M${cx-4*s} ${cy} l-9 0 M${cx-4*s} ${cy} l-8 6" stroke="${C.hi}" stroke-width="${2*s}"/>`;
+    case "wait": return `<circle cx="${cx}" cy="${cy}" r="${11*s}" fill="none" stroke="${W}" stroke-width="${2.5*s}"/><line x1="${cx-6*s}" y1="${cy}" x2="${cx+6*s}" y2="${cy}" stroke="${W}" stroke-width="${3*s}"/>`;
+    case "enemy": return radar(cx,cy,s,"E","#e8c25a");
+    case "missile": return radar(cx,cy,s,"M","#ff8a5a");
+    case "fuel": return `<rect x="${cx-7*s}" y="${cy-12*s}" width="${11*s}" height="${18*s}" fill="none" stroke="${W}" stroke-width="${2*s}"/><rect x="${cx-5*s}" y="${cy-3*s}" width="${7*s}" height="${7*s}" fill="${C.green}"/>${txt(cx+9*s,cy-4*s,"F",{size:9*s,fill:W})}${txt(cx+9*s,cy+6*s,"E",{size:9*s,fill:W})}`;
+    case "dmg": return `<rect x="${cx-13*s}" y="${cy-10*s}" width="${26*s}" height="${9*s}" fill="${W}"/>${txt(cx,cy-3*s,"DMG",{anchor:"middle",size:8*s,fill:"#333",weight:"bold"})}<rect x="${cx-13*s}" y="${cy+2*s}" width="${26*s}" height="${5*s}" fill="none" stroke="${W}"/><rect x="${cx-13*s}" y="${cy+2*s}" width="${12*s}" height="${5*s}" fill="${C.hi}"/>`;
+    case "dice": return `<rect x="${cx-10*s}" y="${cy-11*s}" width="${20*s}" height="${18*s}" rx="${3*s}" fill="${W}"/><circle cx="${cx-4*s}" cy="${cy-5*s}" r="${2*s}" fill="#333"/><circle cx="${cx+4*s}" cy="${cy+1*s}" r="${2*s}" fill="#333"/>`;
+  }
+  return "";
+}
+function radar(cx,cy,s,letter,col){
+  return `<path d="M${cx-2*s} ${cy+8*s} L${cx+6*s} ${cy-2*s}" stroke="#ccc" stroke-width="${3*s}"/><path d="M${cx-8*s} ${cy-6*s} Q${cx+4*s} ${cy-16*s} ${cx+12*s} ${cy+2*s} Z" fill="#dfe5ea" stroke="#999"/>${txt(cx-12*s,cy+10*s,letter,{size:11*s,fill:col,weight:"bold"})}`;
+}
+/* One chip, as an octagon with its glyph, sub label and exits.
+   dirs: {g:"down"|"up"|"left"|"right", r:...} */
+const DV={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
+function chipSVG(id,dirs,size=62,opts={}){
+  const c=CHIPS[id]; if(!c) return "";
+  const s=size/62, m=size/2;
+  let o="";
+  const oct=[[0.25,0],[0.75,0],[1,0.25],[1,0.75],[0.75,1],[0.25,1],[0,0.75],[0,0.25]].map(p=>(p[0]*size).toFixed(1)+","+(p[1]*size).toFixed(1)).join(" ");
+  if(c.kind==="start"){
+    o+=`<polygon points="${oct}" fill="#2a2d33" stroke="${C.hi}" stroke-width="2"/>`;
+    o+=txt(m,m+8*s,"!",{anchor:"middle",size:26*s,fill:"#ff7b8a",weight:"bold"});
+  }else{
+    o+=`<polygon points="${oct}" fill="${opts.mark==="run"?"#2f6a3f":C.chip}" stroke="${C.chipEdge}" stroke-width="2"/>`;
+    o+=chipGlyph(c.glyph,m,m-4*s,s);
+    if(c.sub) o+=txt(m,size-12*s,c.sub,{anchor:"middle",size:10*s,fill:"#eef2f6"});
+  }
+  if(opts.mark) o+=`<polygon points="${oct}" fill="none" stroke="${opts.mark==="run"?C.on:C.hi}" stroke-width="${5*s}"/>`;
+  if(!opts.noExits){
+    const tri=(d,col)=>{const v=DV[d]; const bx=m+v[0]*(m-5*s), by=m+v[1]*(m-5*s);
+      const px=-v[1], py=v[0];
+      return `<polygon points="${bx+v[0]*6*s},${by+v[1]*6*s} ${bx+px*6*s},${by+py*6*s} ${bx-px*6*s},${by-py*6*s}" fill="${col}"/>`;};
+    if(dirs&&dirs.g) o+=tri(dirs.g,C.green);
+    if(c.kind==="test"&&dirs&&dirs.r) o+=tri(dirs.r,C.red);
+  }
+  return `<svg viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans Mono,Consolas,monospace">${o}</svg>`;
+}
+/* Chip drawn inside a bigger SVG picture at (x,y). */
+function chipAt(id,x,y,dirs,size=62){
+  return `<g transform="translate(${x},${y})">${chipSVG(id,dirs,size).replace(/^<svg[^>]*>/,"").replace(/<\/svg>$/,"")}</g>`;
+}
+
+/* ======================================================================
+   Pictures for the Quick Guide slides
+   ====================================================================== */
+const PIC = {
+  turnLoop(){
+    let s=rect(0,0,640,380,{fill:C.bg});
+    const steps=[["PLAN","factory, units, orders",120,90],["DESIGN","parts + chip program",520,90],["END TURN","units move, then fight",520,290],["BATTLE","programs fight it out",120,290]];
+    s+=`<circle cx="320" cy="190" r="70" fill="none" stroke="${C.line}" stroke-width="2" stroke-dasharray="6 6"/>`;
+    s+=txt(320,186,"ONE TURN",{anchor:"middle",fill:C.hi,size:16})+txt(320,206,"repeat until one",{anchor:"middle",fill:C.dim,size:12})+txt(320,222,"side has no bases",{anchor:"middle",fill:C.dim,size:12});
+    steps.forEach(([t,d,x,y])=>{s+=rect(x-100,y-34,200,68,{fill:"#0d1d15",stroke:C.line,sw:2,rx:6})+txt(x,y-6,t,{anchor:"middle",fill:C.bright,size:17})+txt(x,y+16,d,{anchor:"middle",fill:C.text,size:11});});
+    s+=arrow(222,90,416,90,C.hi)+arrow(520,126,520,252,C.hi)+arrow(418,290,224,290,C.hi)+arrow(120,254,120,128,C.hi);
+    return svg(640,380,s);
+  },
+  commandMenu(){
+    let s=rect(0,0,640,380,{fill:"#0a1220"});
+    s+=topStrip(30,20,580,["Command","Turn 1","Funds 500000"]);
+    s+=menuBox(60,80,"",["Tactics","Design","Negotiation","System","End Turn"],0,220);
+    s+=`<path d="M380 330 L470 230 L560 330 Z" fill="#30373f"/><rect x="420" y="250" width="100" height="80" fill="#3b434c"/>`+txt(470,355,"(your base)",{anchor:"middle",fill:C.dim,size:12});
+    return svg(640,380,s);
+  },
+  baseMenu(){
+    let s=rect(0,0,640,380,{fill:"#0a1220"});
+    s+=topStrip(30,20,580,["Base No. 3","Turn 1","Funds 500000"]);
+    s+=menuBox(40,70,"",["Deploy Units","Form Unit","Factory","Unit Command","Base List"],-1,230);
+    s+=rect(420,70,180,150,{fill:"#0c1a24",stroke:C.menuEdge,sw:2,rx:3})+hexMap(450,98,8,5,10,{"2,2":{fill:"#4a8cff"},"6,1":{fill:"#e0485a"}})+rect(470,190,70,22,{fill:C.menu,stroke:C.menuEdge})+txt(505,206,"MAP",{anchor:"middle",fill:C.menuText,size:12});
+    s+=rect(40,320,560,34,{fill:C.menu,stroke:C.menuEdge,sw:2,rx:3})+txt(56,343,"Unit 0   OKE 6   Ammo 47t   Fuel 13440 lit.",{fill:C.menuText,size:15});
+    return svg(640,380,s);
+  },
+  endTurn(){
+    let s=rect(0,0,640,380,{fill:C.bg});
+    s+=hexMap(60,60,11,6,26,{"1,2":{fill:"#2c5cbf",label:"B"},"9,2":{fill:"#a83242",label:"B"},"4,2":{fill:"#4a8cff",label:"1"},"6,2":{fill:"#e0485a",label:"2"}});
+    s+=arrow(230,160,290,160,C.hi)+arrow(400,165,345,165,C.warn);
+    s+=txt(320,350,"Units move along their orders. Two enemies on one hex = a battle.",{anchor:"middle",fill:C.text,size:13});
+    return svg(640,380,s);
+  },
+  win(){
+    let s=rect(0,0,640,380,{fill:C.bg});
+    s+=hexMap(60,60,11,6,26,{"1,2":{fill:"#2c5cbf",label:"B"},"5,4":{fill:"#2c5cbf",label:"B"},"9,2":{fill:"#2c5cbf",label:"B"},"8,2":{fill:"#4a8cff",label:"1"}});
+    s+=txt(320,340,"Take every enemy base to win the map.",{anchor:"middle",fill:C.on,size:15});
+    s+=txt(320,362,"Lose all of yours and the game is over.",{anchor:"middle",fill:C.warn,size:13});
+    return svg(640,380,s);
+  },
+  designMenu(){
+    let s=rect(0,0,640,380,{fill:"#0a1220"});
+    s+=topStrip(30,20,580,["Design","Turn 1","Funds 500000"]);
+    s+=menuBox(50,80,"",["Select Card","Hardware","Software","Test"],-1,220);
+    s+=rect(320,80,220,58,{fill:C.menu,stroke:C.menuEdge,sw:2,rx:3})+txt(360,104,"CARD-1",{fill:C.menuText,size:15})+txt(360,126,"HRD OK   SFT NR",{fill:"#c9d0ff",size:13});
+    s+=robot(470,270,1.1,"legs4");
+    return svg(640,380,s);
+  },
+  hardware(){
+    let s=rect(0,0,640,380,{fill:"#0a1220"});
+    const slots=["BODY","ENGINE","MAIN WEAPON","SUB WEAPON","COMPUTER","FUEL TANK","ARMOR","OPTION","PAINT"];
+    slots.forEach((n,i)=>{s+=rect(20,20+i*38,150,32,{fill:i<7?"#18205a":"#101848",stroke:C.menuEdge,rx:2})+rect(20,20+i*38,6,32,{fill:i<7?C.red:"none"})+txt(36,41+i*38,n,{fill:C.menuText,size:12});});
+    s+=robot(300,190,1.4,"legs2");
+    const stats=[["Firepower","6150"],["Weight","8074 kg"],["Max","8200 kg"],["Cost","1580"],["Proc.","197"],["Level","1"]];
+    s+=rect(430,20,190,250,{fill:"#141a26",stroke:"#3a4458",rx:4});
+    stats.forEach(([a,b],i)=>{s+=txt(445,52+i*34,a,{fill:"#cfd6e4",size:14})+txt(605,52+i*34,b,{fill:"#cfd6e4",size:14,anchor:"end"});});
+    s+=rect(445,290,90,30,{stroke:C.menuEdge,sw:2})+txt(490,310,"AUTO",{anchor:"middle",fill:C.menuText,size:13})+rect(545,290,75,30,{stroke:C.menuEdge,sw:2})+txt(582,310,"EXIT",{anchor:"middle",fill:C.menuText,size:13});
+    return svg(640,380,s);
+  },
+  bodies(){
+    let s=rect(0,0,640,380,{fill:C.bg});
+    [["legs2","TWO LEGS"],["legs4","FOUR LEGS"],["tracks","TRACKS"],["hover","HOVER"]].forEach(([k,n],i)=>{
+      const x=85+i*157; s+=rect(x-70,40,140,230,{fill:"#0d1d15",stroke:C.line,rx:6})+robot(x,150,0.95,k)+txt(x,250,n,{anchor:"middle",fill:C.bright,size:13});
+    });
+    s+=txt(320,320,"Body types move and carry weight differently.",{anchor:"middle",size:13})+txt(320,342,"Which ones you can use depends on the scenario.",{anchor:"middle",size:13,fill:C.dim});
+    return svg(640,380,s);
+  },
+  weight(){
+    let s=rect(0,0,640,380,{fill:C.bg});
+    s+=txt(40,50,"Weight  vs  Max",{fill:C.bright,size:17});
+    s+=rect(40,80,560,40,{stroke:C.line,sw:2})+rect(42,82,540,36,{fill:C.on})+txt(320,106,"8074 kg  of  8200 kg   OK",{anchor:"middle",fill:"#06110a",size:14,weight:"bold"});
+    s+=rect(40,150,560,40,{stroke:C.line,sw:2})+rect(42,152,556,36,{fill:C.warn})+txt(320,176,"9100 kg  of  8200 kg   TOO HEAVY",{anchor:"middle",fill:"#fff",size:14,weight:"bold"});
+    s+=txt(40,240,"Every part adds weight. The body sets the most it can carry.",{size:13});
+    s+=txt(40,264,"Cost = funds per OKE built.  Proc. = factory work to build one.",{size:13});
+    s+=txt(40,288,"Firepower = a rough guide to how hard it hits.",{size:13});
+    return svg(640,380,s);
+  },
+  test(){
+    let s=rect(0,0,640,380,{fill:C.bg});
+    s+=hexMap(40,40,14,7,22,{});
+    s+=robot(200,200,0.9,"legs2")+robot(470,190,0.9,"tracks","#9ab0c8");
+    s+=arrow(260,180,400,180,C.hi,2);
+    s+=txt(320,350,"TEST: try a design against an enemy before you build it.",{anchor:"middle",size:13});
+    return svg(640,380,s);
+  },
+  chipGrid(){
+    let s=rect(0,0,640,380,{fill:"#121418"});
+    for(let c=0;c<6;c++)for(let r=0;r<5;r++) s+=`<polygon points="${[[0.25,0],[0.75,0],[1,0.25],[1,0.75],[0.75,1],[0.25,1],[0,0.75],[0,0.25]].map(p=>(200+c*72+p[0]*64)+","+(20+r*72+p[1]*64)).join(" ")}" fill="#26292f"/>`;
+    s+=chipAt("start",200,20,{g:"down"},64)+chipAt("enemy",200,92,{g:"down",r:"right"},64)+chipAt("mw",272,92,{g:"left"},64)+chipAt("fwd",200,164,{g:"up"},64);
+    s+=rect(20,20,160,64,{fill:"#18205a",stroke:C.menuEdge})+txt(30,58,"selected chip",{fill:C.menuText,size:12});
+    ["PUT","GET","COPY","EDIT","DELETE","ETC","LIST"].forEach((b,i)=>{s+=rect(20,96+i*36,160,30,{fill:"#18205a",stroke:C.menuEdge})+txt(100,116+i*36,b,{anchor:"middle",fill:C.menuText,size:13});});
+    return svg(640,380,s);
+  },
+  greenRed(){
+    let s=rect(0,0,640,380,{fill:C.bg});
+    s+=chipAt("fwd",60,60,{g:"down"},90)+txt(105,180,"ACTION chip",{anchor:"middle",fill:C.bright,size:14})+txt(105,200,"one green exit",{anchor:"middle",fill:C.on,size:12});
+    s+=chipAt("enemy",330,60,{g:"down",r:"right"},90)+txt(375,180,"TEST chip",{anchor:"middle",fill:C.bright,size:14});
+    s+=arrow(425,105,520,105,C.red,4)+txt(530,100,"TRUE:",{fill:C.red,size:13})+txt(530,118,"diverge",{fill:C.red,size:13});
+    s+=arrow(375,155,375,230,C.green,4)+txt(390,250,"FALSE: carry on",{fill:C.green,size:13});
+    s+=txt(40,320,"Tests only look. Actions make the OKE do something.",{size:13})+txt(40,342,"Arrows can point any way; you set them with the arrow buttons.",{size:13,fill:C.dim});
+    return svg(640,380,s);
+  },
+  palette(){
+    let s=rect(0,0,640,380,{fill:"#121418"});
+    const ids=["fwd","back","tr","tl","mr","ml","jump","wait","mw","sw","enemy","missile","fuel","damage","dice"];
+    s+=txt(30,34,"A FEW OF THE CHIPS",{fill:C.hi,size:14});
+    ids.forEach((id,i)=>{const x=30+(i%8)*74, y=50+Math.floor(i/8)*80; s+=chipAt(id,x,y,{},62);});
+    s+=txt(30,240,"Moves:  forward, back, sideways, turn, jump, duck, wait",{size:13});
+    s+=txt(30,262,"Attacks: main weapon, missiles, grapple",{size:13});
+    s+=txt(30,284,"Tests:  enemy / ally / missile / mine nearby, fuel, damage,",{size:13});
+    s+=txt(30,304,"        ammo left, heat, time, chance, counters, signals",{size:13});
+    s+=txt(30,340,"In the game, LIST shows all of them; pick one to read its name.",{size:12,fill:C.dim});
+    return svg(640,380,s);
+  },
+  smallProgram(){
+    let s=rect(0,0,640,380,{fill:"#121418"});
+    s+=chipAt("start",40,40,{g:"down"},70)+chipAt("enemy",40,130,{g:"right",r:"down"},70)+chipAt("fwd",130,130,{g:"left"},70)+chipAt("mw",40,220,{g:"up"},70);
+    s+=txt(240,70,"1. Start.",{size:14});
+    s+=txt(240,110,"2. Enemy within range?",{size:14});
+    s+=txt(260,132,"yes (red)  -> fire main weapon,",{size:13,fill:C.red});
+    s+=txt(260,152,"              then back to the test",{size:13,fill:C.red});
+    s+=txt(260,176,"no (green) -> move forward,",{size:13,fill:C.green});
+    s+=txt(260,196,"              then back to the test",{size:13,fill:C.green});
+    s+=txt(240,250,"Small, but it already hunts.",{size:14,fill:C.hi});
+    s+=txt(240,276,"Try it in the IN-DEPTH LOOK.",{size:13,fill:C.dim});
+    return svg(640,380,s);
+  },
+  factoryMenu(){
+    let s=rect(0,0,640,380,{fill:"#0a1220"});
+    s+=topStrip(30,20,580,["Factory","Turn 1","Funds 500000"]);
+    s+=menuBox(60,80,"",["Production","Add Line","Upgrade"],0,230);
+    s+=rect(40,320,560,34,{fill:C.menu,stroke:C.menuEdge,sw:2,rx:3})+txt(60,343,"OKE   6 / 16          Ammo   47t",{fill:C.menuText,size:15});
+    return svg(640,380,s);
+  },
+  production(){
+    let s=rect(0,0,640,380,{fill:"#0a1220"});
+    s+=topStrip(30,14,580,["Production","Turn 1","Funds 500000"]);
+    const head=["","Product","Amnt.","Level","Cap."], xs=[30,60,370,450,530,610];
+    s+=rect(30,52,580,30,{fill:C.menu,stroke:C.menuEdge});
+    head.forEach((h,i)=>{s+=txt(xs[i]+8,72,h,{fill:"#c9d0ff",size:14});});
+    const rows=[["1","MY-OKE-1","2","1","80",0],["2","Ammo","10","1","80",0],["3","----------","--","-","---",1],["4","----------","--","-","---",1],["5","----------","--","-","---",1],["6","----------","--","-","---",1]];
+    rows.forEach((r,j)=>{const y=82+j*38; s+=rect(30,y,580,38,{fill:C.menu,stroke:C.menuEdge});
+      r.slice(0,5).forEach((v,i)=>{s+=txt(xs[i]+8,y+25,v,{fill:r[5]?"#c0505a":C.menuText,size:15});});});
+    s+=txt(30,330,"Lines 1-2 are open; 3-6 open with Add Line.",{size:13});
+    return svg(640,380,s);
+  },
+  buildTime(){
+    let s=rect(0,0,640,380,{fill:C.bg});
+    s+=txt(40,44,"How long one OKE takes",{fill:C.bright,size:17});
+    s+=txt(40,74,"Design's Proc. = 182 work.  Line capacity = 80 work per turn.",{size:13});
+    const segs=[["TURN 1",80],["TURN 2",80],["TURN 3",22]];
+    let x=40; segs.forEach(([n,w],i)=>{const W=w*2.6; s+=rect(x,100,W,46,{fill:i<2?"#2f6a3f":C.hi,stroke:"#0a0a0a"})+txt(x+W/2,128,n,{anchor:"middle",fill:i<2?"#fff":"#111",size:13}); x+=W;});
+    s+=txt(40,180,"80 + 80 + 22 = 182: ready during the third turn.",{size:13,fill:C.on});
+    s+=txt(40,214,"Leftover work goes into the next OKE on that line.",{size:13});
+    s+=txt(40,248,"Upgrade a line to raise its capacity (80 -> 100 at level 2).",{size:13});
+    s+=txt(40,282,"Funds for an OKE are paid when it starts being built.",{size:13,fill:C.dim});
+    return svg(640,380,s);
+  },
+  ammo(){
+    let s=rect(0,0,640,380,{fill:C.bg});
+    s+=rect(60,60,200,200,{fill:"#0d1d15",stroke:C.line,rx:6})+txt(160,100,"BASE STOCK",{anchor:"middle",fill:C.bright,size:14});
+    s+=txt(160,150,"Ammo  47 t",{anchor:"middle",size:15})+txt(160,185,"Fuel 13440 lit.",{anchor:"middle",size:15});
+    s+=arrow(270,160,370,160,C.hi);
+    s+=rect(380,60,200,200,{fill:"#0d1d15",stroke:C.line,rx:6})+txt(480,100,"NEW UNIT",{anchor:"middle",fill:C.bright,size:14})+txt(480,150,"takes ammo",{anchor:"middle",size:14})+txt(480,180,"and fuel",{anchor:"middle",size:14});
+    s+=txt(320,310,"Units fill up from their base. Keep a line making ammo.",{anchor:"middle",size:13});
+    return svg(640,380,s);
+  },
+  formUnit(){
+    let s=rect(0,0,640,380,{fill:"#0a1220"});
+    s+=topStrip(30,14,580,["Base No. 3","Turn 1","Funds 500000"]);
+    s+=rect(40,56,250,300,{fill:C.menu,stroke:C.menuEdge,sw:2,rx:3})+txt(60,86,"Unit No. 1",{fill:C.menuText,size:17});
+    for(let i=0;i<3;i++) s+=rect(56,100+i*60,218,52,{stroke:"#c9d0ff",sw:1.5})+txt(70,132+i*60,["CARD-28","CARD-27","CARD-27"][i],{fill:C.menuText,size:14});
+    s+=rect(56,300,100,34,{stroke:C.menuEdge,sw:2})+txt(106,322,"Release",{anchor:"middle",fill:C.menuText,size:14})+rect(170,300,104,34,{stroke:C.menuEdge,sw:2})+txt(222,322,"Auto",{anchor:"middle",fill:C.menuText,size:14});
+    s+=rect(330,56,270,300,{fill:C.menu,stroke:C.menuEdge,sw:2,rx:3})+txt(346,82,"OKEs at this base",{fill:"#c9d0ff",size:13});
+    for(let i=0;i<3;i++) s+=rect(346,96+i*60,238,52,{stroke:C.menuEdge})+txt(360,128+i*60,"CARD-27",{fill:C.menuText,size:14});
+    return svg(640,380,s);
+  },
+  orders(){
+    let s=rect(0,0,640,380,{fill:"#0a1220"});
+    s+=topStrip(30,14,580,["Unit No. 1","Turn 1","Funds 500000"]);
+    s+=menuBox(40,60,"",["Move","Defend Base","Capture Base","Patrol","Standby"],2,240);
+    s+=rect(330,60,270,200,{fill:"#0c1a24",stroke:C.menuEdge,sw:2,rx:3})+hexMap(352,86,10,6,14,{"1,2":{fill:"#4a8cff"},"8,1":{fill:"#e0485a"}})+arrow(380,124,560,104,C.hi,2);
+    return svg(640,380,s);
+  },
+  baseDanger(){
+    let s=rect(0,0,640,380,{fill:C.bg});
+    s+=hexMap(60,60,11,6,26,{"2,2":{fill:"#2c5cbf",label:"B"},"3,2":{fill:"#e0485a",label:"2"}});
+    s+=arrow(250,160,200,160,C.warn);
+    s+=txt(320,320,"No unit at a base = the enemy walks in and takes it,",{anchor:"middle",size:13,fill:C.warn});
+    s+=txt(320,342,"and the OKEs stored there are lost. Leave a defender.",{anchor:"middle",size:13,fill:C.warn});
+    return svg(640,380,s);
+  },
+  battle(){
+    let s=rect(0,0,640,380,{fill:"#0b0f12"});
+    s+=`<path d="M0 260 L640 230 L640 380 L0 380 Z" fill="#203024"/>`;
+    s+=robot(160,210,0.9,"legs2")+robot(240,240,0.8,"legs2")+robot(110,260,0.8,"legs2");
+    s+=robot(470,200,0.9,"tracks","#9ab0c8")+robot(540,240,0.8,"tracks","#9ab0c8")+robot(420,250,0.8,"tracks","#9ab0c8");
+    s+=txt(320,40,"3 against 3. You only watch.",{anchor:"middle",fill:C.bright,size:16});
+    s+=txt(320,66,"The chip programs decide everything.",{anchor:"middle",fill:C.dim,size:13});
+    return svg(640,380,s);
+  },
+  repair(){
+    let s=rect(0,0,640,380,{fill:C.bg});
+    s+=txt(40,50,"After a battle",{fill:C.bright,size:17});
+    s+=txt(40,90,"Damage stays with the OKE: the next battle starts with it.",{size:13});
+    s+=txt(40,120,"An OKE with no HP left is destroyed.",{size:13});
+    s+=txt(40,150,"A unit with no OKEs left is gone.",{size:13});
+    s+=txt(40,200,"OKEs resting at a base get 20% of their HP back each turn.",{size:13,fill:C.on});
+    s+=rect(40,230,400,26,{stroke:C.line})+rect(42,232,170,22,{fill:C.warn})+rect(212,232,80,22,{fill:C.on});
+    s+=txt(460,249,"+20% per turn",{fill:C.on,size:13});
+    return svg(640,380,s);
+  },
+};
+
+/* ======================================================================
+   Lessons
+   ====================================================================== */
+const LESSONS = [
+{ id:"turn", title:"How a turn works", blurb:"The campaign map, your funds, and what happens when you press End Turn.",
+  slides:[
+    {pic:"turnLoop", title:"The loop",
+     text:["Carnage Heart is a strategy game where you never steer a robot yourself.",
+           "Each turn you plan on the map and design your OKEs (the robots). Then you end the turn, and battles are fought by the programs you wrote."],
+     spots:[{x:3.12,y:14.74,w:31.25,h:17.89,label:"Plan",note:"PLAN is the Tactics menu: build things in the factory, put OKEs into units and give the units orders."},
+            {x:65.62,y:14.74,w:31.25,h:17.89,label:"Design",note:"DESIGN: choose an OKE's parts (hardware) and write its chip program (software). One design is saved on a CARD."},
+            {x:65.62,y:67.37,w:31.25,h:17.89,label:"End turn",note:"END TURN: units move along their orders, factories work, bases refuel and repair. The enemy plays too."},
+            {x:3.12,y:67.37,w:31.25,h:17.89,label:"Battle",note:"BATTLE: when two enemy units meet on the map they fight. Up to three OKEs per side, all driven by their programs."}]},
+    {pic:"commandMenu", title:"The Command menu",
+     text:["Every turn starts here. Five choices:",
+           "TACTICS (your bases and units), DESIGN (OKE cards), NEGOTIATION, SYSTEM (save, load, options) and END TURN."],
+     spots:[{x:10.31,y:23.16,w:32.50,h:6.84,label:"Tactics",note:"Opens your bases: deploy units, form units, run the factory, command units in the field, see every base."},
+            {x:10.31,y:30.00,w:32.50,h:6.84,label:"Design",note:"Pick a card, then build its hardware, write its software and test it."},
+            {x:10.31,y:36.84,w:32.50,h:6.84,label:"Negotiation",note:"A lesson about Negotiation comes later."},
+            {x:10.31,y:43.68,w:32.50,h:6.84,label:"System",note:"Saving and loading your campaign, and options."},
+            {x:10.31,y:50.53,w:32.50,h:6.84,label:"End Turn",note:"When you are happy with your plans, end the turn. Everything else happens by itself."},
+            {x:4.69,y:4.74,w:90.62,h:7.89,label:"Top bar",note:"The top bar always shows where you are, the turn number and your funds. Funds pay for new OKEs, ammo and factory work."}]},
+    {pic:"baseMenu", title:"Your base",
+     text:["TACTICS shows one base at a time. The bar at the bottom says what is stored there: units, OKEs, ammo and fuel.",
+           "The little map shows where you are; MAP opens the full map."],
+     spots:[{x:6.25,y:18.42,w:35.94,h:43.16,label:"Base menu",note:"Deploy Units and Unit Command give orders. Form Unit groups OKEs. Factory builds. Base List jumps to another base."},
+            {x:65.62,y:18.42,w:28.12,h:39.47,label:"Minimap",note:"Blue is you, red is the enemy. With the mouse you can click on the minimap, turn it, or open the big MAP."},
+            {x:6.25,y:83.68,w:87.50,h:10.00,label:"Stock",note:"Unit = units at this base. OKE = robots stored here. Ammo and Fuel are what new units fill up with."}]},
+    {pic:"endTurn", title:"End Turn",
+     text:["Units walk one step along their orders. Factories add their work. Bases refill their fuel.",
+           "If your unit and an enemy unit end up on the same hex, a battle starts and you watch it."]},
+    {pic:"win", title:"Winning",
+     text:["Each map is won by taking every enemy base, and lost if you have no bases left.",
+           "A scenario has one or more maps. Europa (Practice) is the place to learn: one map and easy enemies."]},
+  ],
+  deep:"turn" },
+{ id:"design", title:"Designing a robot", blurb:"Cards, parts, weight and cost: the hardware side of an OKE.",
+  slides:[
+    {pic:"designMenu", title:"Cards",
+     text:["Every OKE design lives on a CARD. The card has two halves: HARDWARE (the parts) and SOFTWARE (the chip program).",
+           "HRD OK / SFT NR means the parts are done but the program is not ready yet."],
+     spots:[{x:8.75,y:23.16,w:32.50,h:6.84,label:"Select Card",note:"Choose which card to work on. Your campaign keeps many cards; the factory builds OKEs from them."},
+            {x:8.75,y:30.00,w:32.50,h:6.84,label:"Hardware",note:"Choose the body and every part. AUTO picks a full set for you."},
+            {x:8.75,y:36.84,w:32.50,h:6.84,label:"Software",note:"The chip program. See the lesson Programming chips."},
+            {x:8.75,y:43.68,w:32.50,h:6.84,label:"Test",note:"Try the design in a practice battle before you build it."},
+            {x:50.00,y:21.05,w:34.38,h:15.26,label:"Card status",note:"Name of the card, and whether its hardware (HRD) and software (SFT) are ready."}]},
+    {pic:"hardware", title:"The parts",
+     text:["Down the left: body, engine, main weapon, sub weapon (missiles), computer, fuel tank and armor. Then optional equipment and the paint.",
+           "A red mark means the slot is filled. The numbers on the right add up as you pick parts."],
+     spots:[{x:2.81,y:4.74,w:24.06,h:90.00,label:"Slots",note:"Seven slots every OKE needs, then OPTION (extra equipment) and PAINT. Pick a slot to see the parts you can use."},
+            {x:66.88,y:4.74,w:30.31,h:66.84,label:"Numbers",note:"Firepower, Weight against Max (what the body can carry), Cost (funds per OKE), Proc. (factory work per OKE) and Level."},
+            {x:69.22,y:75.79,w:14.69,h:8.95,label:"AUTO",note:"AUTO builds a sensible design for you. A good start: change it bit by bit afterwards."}]},
+    {pic:"bodies", title:"Bodies",
+     text:["The body decides how the OKE moves and how much it can carry.",
+           "Early on you may only have one body; more arrive as the campaign goes on."]},
+    {pic:"weight", title:"Weight, cost and build time",
+     text:["Keep Weight under Max. Heavier weapons and armor need a body that can carry them.",
+           "Cost and Proc. matter on the campaign map: cheap, quick designs fill your bases faster."]},
+    {pic:"test", title:"Test it",
+     text:["TEST puts your design into a practice battle. Nothing is spent and nothing is lost.",
+           "Test after every change to the program: you will see straight away if the OKE does something silly."]},
+  ],
+  deep:"design" },
+{ id:"chips", title:"Programming chips", blurb:"The heart of the game: action chips, test chips and the green and red arrows.",
+  slides:[
+    {pic:"chipGrid", title:"The chip grid",
+     text:["An OKE's brain is a grid of chips. The program starts at the ! square in the corner and follows arrows from chip to chip.",
+           "The buttons on the left place, pick up, copy, change and delete chips. LIST shows every chip."],
+     spots:[{x:2.81,y:4.74,w:25.62,h:17.89,label:"Selected",note:"The chip you are about to place, with its arrows."},
+            {x:2.81,y:24.74,w:25.62,h:8.95,label:"PUT",note:"PUT the selected chip on a square. GET picks up the chip on a square so you can move it."},
+            {x:2.81,y:72.11,w:25.62,h:8.95,label:"ETC",note:"ETC: start a New program, let the game write one (Auto), or Copy one from another card."},
+            {x:2.81,y:81.58,w:25.62,h:8.95,label:"LIST",note:"LIST opens the full chip palette."},
+            {x:30.94,y:4.74,w:10.62,h:17.89,label:"Start",note:"The program always starts here."}]},
+    {pic:"greenRed", title:"Green and red arrows",
+     text:["ACTION chips (move, turn, fire...) do one thing and then follow their green arrow.",
+           "TEST chips ask a question. If the answer is yes the program diverges: it follows the red arrow. If not, it follows the green arrow."]},
+    {pic:"palette", title:"What chips are there?",
+     text:["Movement and attacks are actions. Everything that checks something (an enemy within range, fuel, damage, ammo, heat, a random chance) is a test.",
+           "Many chips have settings, like the range and direction a radar test looks in."]},
+    {pic:"smallProgram", title:"A first program",
+     text:["Four squares are enough for an OKE that walks forward until an enemy is in range and then shoots.",
+           "Next step: add tests for missiles (dodge them) and for damage (back off)."]},
+  ],
+  deep:"chips" },
+{ id:"factory", title:"The factory", blurb:"Production lines, ammo, adding lines and upgrades.",
+  slides:[
+    {pic:"factoryMenu", title:"Factory",
+     text:["Each base has its own factory, reached from TACTICS.",
+           "The bottom bar shows how many OKEs are stored (and how many fit) and how much ammo the base has."],
+     spots:[{x:10.31,y:23.16,w:34.06,h:6.84,label:"Production",note:"Tell a line what to make and how many."},
+            {x:10.31,y:30.00,w:34.06,h:6.84,label:"Add Line",note:"Open another production line at this base (costs funds)."},
+            {x:10.31,y:36.84,w:34.06,h:6.84,label:"Upgrade",note:"Raise a line's level so it does more work per turn (costs funds)."}]},
+    {pic:"production", title:"Production lines",
+     text:["A line makes one product: an OKE from one of your cards, or ammo.",
+           "Level is the line's level; Cap. is how much work it does each turn."],
+     spots:[{x:9.38,y:21.58,w:48.44,h:20.00,label:"Product",note:"Pick a card (an OKE design) or Ammo, then how many (Amnt.)."},
+            {x:82.81,y:21.58,w:12.50,h:20.00,label:"Cap.",note:"Work per turn. A design's Proc. says how much work one OKE needs."},
+            {x:4.69,y:41.58,w:90.62,h:40.00,label:"Closed lines",note:"Red lines are not open yet. Add Line opens them, one at a time."}]},
+    {pic:"buildTime", title:"How long it takes",
+     text:["Every turn a line adds its capacity to the OKE it is building. When the work reaches the design's Proc., the OKE is finished and waits at the base.",
+           "So cheaper, simpler designs come out faster."]},
+    {pic:"ammo", title:"Don't forget ammo",
+     text:["Units take ammo and fuel from their base when they are formed. A base with no ammo sends out empty guns.",
+           "Keep one line making ammo where your units are formed."]},
+  ],
+  deep:"factory" },
+{ id:"units", title:"Forming units and sending them out", blurb:"Group OKEs into units, give orders, and what happens in battle.",
+  slides:[
+    {pic:"formUnit", title:"Form Unit",
+     text:["A unit is up to three OKEs that travel and fight together.",
+           "Pick OKEs from the right-hand list, or press Auto. Release takes them out again."],
+     spots:[{x:6.25,y:14.74,w:39.06,h:78.95,label:"Unit",note:"The unit being formed. Up to three OKEs. It fills up with ammo and fuel from the base."},
+            {x:51.56,y:14.74,w:42.19,h:78.95,label:"At the base",note:"OKEs waiting at this base, with their ammo, fuel and damage."},
+            {x:26.25,y:78.42,w:16.88,h:10.00,label:"Auto",note:"Auto fills the unit for you."}]},
+    {pic:"orders", title:"Orders",
+     text:["DEPLOY UNITS gives orders to units still at the base; UNIT COMMAND to units already out on the map.",
+           "Move, Defend Base, Capture Base, Patrol or Standby. For most orders you then pick a place on the map."],
+     spots:[{x:7.19,y:17.89,w:35.62,h:6.84,label:"Move",note:"Walk to the hex you pick."},
+            {x:7.19,y:24.74,w:35.62,h:6.84,label:"Defend Base",note:"Go to a base and guard it."},
+            {x:7.19,y:31.58,w:35.62,h:6.84,label:"Capture Base",note:"Go to an enemy (or empty) base and take it."},
+            {x:7.19,y:38.42,w:35.62,h:6.84,label:"Patrol",note:"Walk around the area."},
+            {x:7.19,y:45.26,w:35.62,h:6.84,label:"Standby",note:"Stay where it is."},
+            {x:51.56,y:15.79,w:42.19,h:52.63,label:"Map",note:"Pick the target hex on the map. You can change a unit's orders on any later turn."}]},
+    {pic:"battle", title:"Battle",
+     text:["When units meet, their OKEs fight in 3D. You can change the camera and the information shown, but not the OKEs.",
+           "When it ends, the winners stay; a unit that lost all its OKEs is removed."]},
+    {pic:"repair", title:"After the battle",
+     text:["Damage carries over to the next battle. Bring tired units home: OKEs resting at a base repair a little every turn."]},
+    {pic:"baseDanger", title:"Guard your bases",
+     text:["If an enemy unit walks onto a base with no unit there, it takes the base at once and the stored OKEs are lost.",
+           "Keep a unit on Defend Base at the bases that matter."]},
+  ],
+  deep:"units" },
+{ id:"negotiation", title:"Negotiation", blurb:"Coming later.", soon:true, slides:[], deep:null },
+];
+
+/* ======================================================================
+   App state, rendering and input
+   ====================================================================== */
+const app = document.getElementById("app");
+const S = { lesson:null, mode:"quick", slide:0, spot:-1 };
+let focusables = [], fidx = 0;
+
+function setFocusables(list, keep){
+  focusables = list.filter(Boolean);
+  if(!keep) fidx = 0;
+  if(fidx >= focusables.length) fidx = Math.max(0, focusables.length-1);
+  paintFocus();
+}
+function paintFocus(){
+  document.querySelectorAll(".focus").forEach(e=>e.classList.remove("focus"));
+  const el = focusables[fidx]; if(el){ el.classList.add("focus"); }
+}
+function moveFocus(d){
+  if(!focusables.length) return;
+  fidx = (fidx + d + focusables.length) % focusables.length;
+  paintFocus();
+  const el = focusables[fidx]; if(el && el.scrollIntoView) el.scrollIntoView({block:"nearest"});
+}
+
+function go(hash){ if(location.hash !== hash) location.hash = hash; else route(); }
+function route(){
+  const h = location.hash.replace(/^#/,"").split("/");
+  const L = LESSONS.find(l=>l.id===h[0] && !l.soon);
+  if(!L){ S.lesson=null; renderHome(); return; }
+  S.lesson=L; S.mode = h[1]==="deep" ? "deep" : "quick";
+  S.slide = Math.max(0, Math.min((parseInt(h[2])||1)-1, L.slides.length-1));
+  S.spot=-1;
+  renderLesson();
+}
+window.addEventListener("hashchange", route);
+document.getElementById("homeBtn").onclick = ()=>go("#");
+
+function renderHome(){
+  document.getElementById("homeBtn").hidden = true;
+  document.getElementById("hsub").textContent = "TUTORIALS";
+  let h = `<p class="intro">Six short lessons. Each one has a <span class="hi">QUICK GUIDE</span> (a few slides; click the dashed boxes for notes)
+  and an <span class="hi">IN-DEPTH LOOK</span> where you can try things: copies of the game's menus to click through and a practice chip grid.
+  Start with <span class="hi">How a turn works</span>.</p><div class="cards">`;
+  LESSONS.forEach((l,i)=>{
+    h += `<div class="panel card${l.soon?" soon":""}" data-id="${l.id}" tabindex="0"><span class="cap">LESSON ${i+1}</span>
+      <div class="num">${l.soon?"COMING LATER":(l.slides.length+" SLIDES + IN-DEPTH LOOK")}</div><h2>${esc(l.title)}</h2><p>${esc(l.blurb)}</p></div>`;
+  });
+  h += `</div>`;
+  app.innerHTML = h;
+  const cards=[...app.querySelectorAll(".card")];
+  cards.forEach(c=>{ if(!c.classList.contains("soon")) c.onclick=()=>go("#"+c.dataset.id); });
+  setFocusables(cards.filter(c=>!c.classList.contains("soon")));
+}
+
+function renderLesson(){
+  const L=S.lesson;
+  document.getElementById("homeBtn").hidden = false;
+  document.getElementById("hsub").textContent = "TUTORIALS / " + L.title.toUpperCase();
+  let h = `<div class="tabs">
+     <button class="btn tab${S.mode==="quick"?" sel":""}" id="tQuick">QUICK GUIDE</button>
+     <button class="btn tab${S.mode==="deep"?" sel":""}" id="tDeep">IN-DEPTH LOOK</button></div><div id="body"></div>`;
+  app.innerHTML = h;
+  document.getElementById("tQuick").onclick=()=>go("#"+L.id);
+  document.getElementById("tDeep").onclick=()=>go("#"+L.id+"/deep");
+  if(S.mode==="quick") renderSlide(); else DEEP[L.deep](document.getElementById("body"));
+}
+
+function renderSlide(){
+  const L=S.lesson, sl=L.slides[S.slide], body=document.getElementById("body");
+  let h = `<div class="slide"><div class="pic" id="pic">${PIC[sl.pic]()}`;
+  (sl.spots||[]).forEach((sp,i)=>{
+    h += `<div class="spot${S.spot===i?" sel":""}" data-i="${i}" style="left:${sp.x}%;top:${sp.y}%;width:${sp.w}%;height:${sp.h}%" title="${esc(sp.label)}"><span class="dot">${i+1}</span></div>`;
+  });
+  h += `</div><div class="panel words"><span class="cap">${S.slide+1} / ${L.slides.length}</span><h2>${esc(sl.title)}</h2>`;
+  sl.text.forEach(t=>{ h += `<p>${esc(t)}</p>`; });
+  if(sl.spots&&sl.spots.length){
+    const sp=sl.spots[S.spot];
+    h += `<div class="note">${sp?`<span class="hi">${esc(sp.label.toUpperCase())}:</span> ${esc(sp.note)}`:`<span class="dim">Click a numbered box on the picture for a note.</span>`}</div>`;
+  }
+  h += `</div></div><div class="nav"><button class="btn" id="prev" ${S.slide?"":"disabled"}>&lt; BACK</button><div class="dots">`;
+  L.slides.forEach((_,i)=>{ h += `<span class="${i===S.slide?"sel":""}"></span>`; });
+  const last = S.slide===L.slides.length-1;
+  h += `</div><button class="btn primary" id="next">${last?"IN-DEPTH LOOK &gt;":"NEXT &gt;"}</button></div>
+  <div class="hint">LEFT / RIGHT or LB / RB: slides. UP / DOWN: pick a note. A / ENTER: open. B / ESC: back.</div>`;
+  body.innerHTML = h;
+  const spots=[...body.querySelectorAll(".spot")];
+  spots.forEach(e=>e.onclick=()=>{ S.spot=+e.dataset.i; fidx=S.spot; renderSlide(); });
+  document.getElementById("prev").onclick=()=>slideStep(-1);
+  document.getElementById("next").onclick=()=>slideStep(1);
+  setFocusables([...spots, document.getElementById("next")], true);
+}
+function slideStep(d){
+  const L=S.lesson;
+  if(S.mode!=="quick") return;
+  const n=S.slide+d;
+  if(n<0) return;
+  if(n>=L.slides.length){ go("#"+L.id+"/deep"); return; }
+  fidx=0; go("#"+L.id+"/quick/"+(n+1));
+}
+
+/* ---------------- In-depth pieces ---------------- */
+const DEEP = {};
+
+/* A clickable copy of a game menu tree. tree: {title, top:[...], items:[{label, note, children?, off?}]} */
+function menuExplorer(root, tree, intro){
+  const path=[tree];
+  let sel=0;
+  function draw(){
+    const node=path[path.length-1];
+    const crumbs=path.map(n=>n.title).join(" &gt; ");
+    const it=node.items[sel];
+    root.innerHTML = `<p class="dim">${intro}</p>
+    <div class="rep"><div>
+      <div class="crumbs">${crumbs}</div>
+      <div class="topbar">${(node.top||[]).map(t=>`<span>${esc(t)}</span>`).join("")}</div>
+      <div class="gmenu">${node.items.map((x,i)=>`<div class="it${i===sel?" sel":""}${x.off?" off":""}" data-i="${i}">${esc(x.label)}${x.children?" &gt;":""}</div>`).join("")}</div>
+      <div class="row"><button class="btn" id="mBack" ${path.length>1?"":"disabled"}>&lt; BACK</button>
+      ${it&&it.children?`<button class="btn primary" id="mOpen">OPEN ${esc(it.label.toUpperCase())}</button>`:""}</div>
+    </div><div class="panel"><span class="cap">WHAT IT DOES</span><h2>${esc(it?it.label:"")}</h2>${it?it.note:""}</div></div>`;
+    const items=[...root.querySelectorAll(".gmenu .it")];
+    items.forEach(e=>e.onclick=()=>{ const i=+e.dataset.i; if(i===sel && node.items[i].children){open();} else {sel=i; fidx=i; draw();} });
+    const b=root.querySelector("#mBack"); if(b) b.onclick=back;
+    const o=root.querySelector("#mOpen"); if(o) o.onclick=open;
+    setFocusables(items,true);
+    focusables.forEach((e,i)=>{ e.addEventListener("click",()=>{}); });
+  }
+  function open(){ const it=path[path.length-1].items[sel]; if(it&&it.children){ path.push(it.children); sel=0; fidx=0; draw(); } }
+  function back(){ if(path.length>1){ const prev=path.pop(); const parent=path[path.length-1]; sel=Math.max(0,parent.items.findIndex(x=>x.children===prev)); fidx=sel; draw(); return true;} return false; }
+  root._back = back;
+  root._focusSync = ()=>{ if(fidx!==sel){ sel=fidx; draw(); } };
+  draw();
+}
+
+DEEP.turn = function(root){
+  const P=(...a)=>a.map(t=>`<p>${t}</p>`).join("");
+  const top=["Command","Turn 1","Funds 500000"];
+  const baseTop=["Base No. 3","Turn 1","Funds 500000"];
+  const tree={title:"Command", top, items:[
+    {label:"Tactics", note:P("Your bases, one at a time. Everything you do on the map starts here.","Pick it twice (or OPEN) to see its menu."), children:{title:"Tactics", top:baseTop, items:[
+      {label:"Deploy Units", note:P("Orders for units that are still at this base: Move, Defend Base, Capture Base, Patrol, Standby.","A newly formed unit does nothing until you give it an order here.")},
+      {label:"Form Unit", note:P("Put up to three OKEs from this base into a unit. The unit takes ammo and fuel from the base's stock. Forming costs no funds.")},
+      {label:"Factory", note:P("This base's factory."), children:{title:"Factory", top:["Factory","Turn 1","Funds 500000"], items:[
+        {label:"Production", note:P("Choose what each production line makes (an OKE card or ammo) and how many.","Funds are spent during End Turn, when an OKE starts being built.")},
+        {label:"Add Line", note:P("Open another production line at this base. Costs funds once.")},
+        {label:"Upgrade", note:P("Raise a line's level so it does more work each turn. Costs funds.")}]}},
+      {label:"Unit Command", note:P("Orders for units already out on the map, even while they are walking. Change your mind any turn.")},
+      {label:"Base List", note:P("All your bases. Jump to another base to use its factory and units.")}]}},
+    {label:"Design", note:P("Your OKE cards."), children:{title:"Design", top:["Design","Turn 1","Funds 500000"], items:[
+      {label:"Select Card", note:P("Pick the card (design) to work on.")},
+      {label:"Hardware", note:P("The parts: body, engine, weapons, computer, fuel tank, armor, option and paint. AUTO fills them in.")},
+      {label:"Software", note:P("The chip program. See the lesson Programming chips.")},
+      {label:"Test", note:P("A practice battle for the selected card. Nothing is spent.")}]}},
+    {label:"Negotiation", note:P("A lesson about Negotiation comes later.")},
+    {label:"System", note:P("Save and load the campaign, and options.")},
+    {label:"End Turn", note:P("Ends your turn. In order: units move along their orders (and fight if they meet an enemy), the enemy plans and moves, bases refuel, factories work, OKEs resting at bases repair a little. Then a new turn starts.","Win a map by taking every enemy base; lose it if you have no bases left.")},
+  ]};
+  menuExplorer(root, tree, "A copy of the game's menus. Click (or A) to select; click again or OPEN to go in; BACK (or B) to go up.");
+};
+
+DEEP.design = function(root){
+  const slots=[
+    ["Body","Decides how the OKE moves and the Max weight it can carry. The choice of bodies grows during the campaign."],
+    ["Engine","Power for the body. Pick one that suits the body and the weight you carry."],
+    ["Main weapon","The gun the OKE fires with the main-weapon chip. Its ammo count shows on the unit screens."],
+    ["Sub weapon","Missiles and similar. Fired with the sub-weapon chip, a few shots at a time."],
+    ["Computer","Runs the chip program. Better computers allow bigger programs."],
+    ["Fuel tank","Fuel for moving in battle. The fuel chip can check how much is left."],
+    ["Armor","Protection. Heavy, so watch the Weight."],
+    ["Option","Extra equipment. You can leave it empty."],
+    ["Paint","The colours. Just for looks."]];
+  const stats=[["Firepower","A rough guide to how hard the weapons hit."],["Weight","What all the parts weigh together."],["Max","The most the body can carry. Keep Weight below it."],["Cost","Funds for each OKE built from this card."],["Proc.","Factory work for each OKE. A line does its capacity in work per turn."],["Level","Shown with the design's stats."]];
+  let sel=0;
+  function draw(){
+    const isStat = sel>=slots.length;
+    const t = isStat ? stats[sel-slots.length] : slots[sel];
+    root.innerHTML = `<p class="dim">A copy of the Hardware screen. Click a slot or a number for what it means.</p>
+    <div class="rep"><div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div class="gmenu"><div class="title">CARD-1</div>${slots.map((s,i)=>`<div class="it${i===sel?" sel":""}" data-i="${i}">${i<7?'<span class="warn">&#9608;</span> ':'&nbsp;&nbsp;'}${esc(s[0])}</div>`).join("")}</div>
+      <div class="gmenu"><div class="title">NUMBERS</div>${stats.map((s,i)=>`<div class="it${i+slots.length===sel?" sel":""}" data-i="${i+slots.length}">${esc(s[0])}</div>`).join("")}</div>
+    </div><div class="panel"><span class="cap">WHAT IT IS</span><h2>${esc(t[0])}</h2><p>${esc(t[1])}</p>
+      <h3>Tips</h3><p>Start with AUTO, then change one part at a time and TEST after each change.</p>
+      <p>A card shows <span class="hi">HRD OK</span> when its parts are complete and <span class="hi">SFT OK</span> when its program is.</p></div></div>`;
+    const items=[...root.querySelectorAll(".gmenu .it")];
+    items.forEach(e=>e.onclick=()=>{ sel=+e.dataset.i; fidx=sel; draw(); });
+    setFocusables(items,true);
+  }
+  root._focusSync=()=>{ if(fidx!==sel){ sel=fidx; draw(); } };
+  draw();
+};
+
+/* -------- practice chip grid -------- */
+DEEP.chips = function(root){
+  const COLS=6, ROWS=5;
+  const PAL=["fwd","back","tl","tr","ml","mr","jump","wait","mw","sw","enemy","missile","fuel","damage","dice"];
+  const SIT={enemy:true, missile:false, fuel:false, damage:false};
+  const SITNAME={enemy:"An enemy is within range", missile:"A missile is coming", fuel:"Fuel is below 50%", damage:"Damage is below 50%"};
+  let grid = {};          /* "c,r": {id, g, r} */
+  let pick = "fwd", selCell = null, runAt = null, steps = 0;
+  const log = [];
+  function key(c,r){return c+","+r;}
+  function example(){
+    grid = {"0,0":{id:"start",g:"down"},"0,1":{id:"enemy",g:"right",r:"down"},"1,1":{id:"fwd",g:"left"},"0,2":{id:"mw",g:"up"}};
+    runAt=null; steps=0; log.length=0; addLog("Loaded the example from the Quick Guide. Press STEP.");
+  }
+  function clearAll(){ grid={"0,0":{id:"start",g:"down"}}; runAt=null; steps=0; log.length=0; addLog("Empty grid. Pick a chip on the left, then click a square."); }
+  function addLog(s,cls){ log.push([s,cls||""]); if(log.length>200) log.shift(); }
+  function place(c,r){
+    const k=key(c,r);
+    if(k==="0,0"){ selCell=k; draw(); return; }
+    if(grid[k] && selCell===k){ draw(); return; }
+    if(!grid[k] || grid[k].id!==pick){
+      const t=CHIPS[pick];
+      grid[k]={id:pick, g:"down", r:t.kind==="test"?"right":undefined};
+    }
+    selCell=k; draw();
+  }
+  const DIRS=["up","right","down","left"];
+  function rot(which){ if(!selCell||!grid[selCell]) return; const ch=grid[selCell];
+    if(which==="r" && CHIPS[ch.id].kind!=="test") return;
+    ch[which]=DIRS[(DIRS.indexOf(ch[which]||"down")+1)%4]; draw(); }
+  function del(){ if(selCell && selCell!=="0,0"){ delete grid[selCell]; selCell=null; draw(); } }
+  function step(){
+    steps++;
+    if(!runAt){ runAt="0,0"; addLog(`${steps}. START`,"hi"); return follow(grid["0,0"].g); }
+    const ch=grid[runAt], t=CHIPS[ch.id];
+    if(t.kind==="act"){
+      addLog(`${steps}. ${t.name}`,"on");
+      return follow(ch.g);
+    }
+    let yes;
+    if(ch.id==="dice"){ yes=Math.random()<0.2; addLog(`${steps}. Roll 1 in 5: ${yes?"yes":"no"}`); }
+    else { yes=!!SIT[t.sit]; addLog(`${steps}. ${SITNAME[t.sit]}? ${yes?"YES: diverge (red)":"no (green)"}`, yes?"warn":""); }
+    return follow(yes?ch.r:ch.g);
+  }
+  function follow(d){
+    const [c,r]=runAt.split(",").map(Number), v=DV[d||"down"];
+    const n=key(c+v[0],r+v[1]);
+    if(c+v[0]<0||r+v[1]<0||c+v[0]>=COLS||r+v[1]>=ROWS||!grid[n]){
+      addLog(`   The arrow points at an empty square: back to START.`,"dim"); runAt="0,0";
+    } else runAt=n;
+    draw();
+  }
+  function draw(){
+    let h=`<p class="dim">A practice grid, much smaller than the game's. Pick a chip in the palette, click a square to put it there, and turn its arrows.
+      Then set the situation and press STEP to follow the program one chip at a time. (Touch: tap the chip, then the square.)</p>
+      <div class="cg"><div class="panel"><span class="cap">CHIPS</span><div class="palette">`;
+    PAL.forEach(id=>{ h+=`<div class="chip${pick===id?" sel":""}" draggable="true" data-id="${id}" title="${esc(CHIPS[id].name)}">${chipSVG(id,{g:"down",r:"right"},44)}</div>`; });
+    h+=`</div><p style="font-size:12px;margin:10px 0 0"><span class="hi">${esc(CHIPS[pick].name)}</span><br><span class="dim">${CHIPS[pick].kind==="test"?"Test chip: green and red exits.":"Action chip: one green exit."}</span></p></div>
+      <div><div class="board" style="grid-template-columns:repeat(${COLS},62px)">`;
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+      const k=key(c,r), ch=grid[k];
+      h+=`<div class="cell${selCell===k?" sel":""}${runAt===k?" run":""}" data-k="${k}">${ch?chipSVG(ch.id,{g:ch.g,r:ch.r},62,{mark:runAt===k?"run":selCell===k?"sel":null}):""}</div>`;
+    }
+    const sc=selCell&&grid[selCell], st=sc&&CHIPS[sc.id];
+    h+=`</div><div class="row"><button class="btn" id="rg" ${sc?"":"disabled"}>TURN GREEN ARROW</button>
+      <button class="btn" id="rr" ${st&&st.kind==="test"?"":"disabled"}>TURN RED ARROW</button>
+      <button class="btn" id="del" ${sc&&selCell!=="0,0"?"":"disabled"}>DELETE</button></div>
+      <div class="row"><button class="btn" id="ex">LOAD EXAMPLE</button><button class="btn" id="clr">CLEAR</button></div></div>
+      <div class="panel"><span class="cap">RUN IT</span><div class="sit">`;
+    Object.keys(SIT).forEach(s=>{ h+=`<label><input type="checkbox" data-s="${s}" ${SIT[s]?"checked":""}> ${SITNAME[s]}</label>`; });
+    h+=`</div><div class="row"><button class="btn primary" id="step">STEP</button><button class="btn" id="reset">RESTART</button></div>
+      <div class="log" id="log">${log.map(([s,c])=>`<div class="${c}">${esc(s)}</div>`).join("")}</div>
+      <p style="font-size:12px" class="dim">In the game, always connect every arrow to a chip. This practice grid just goes back to START when an arrow points at nothing.</p></div></div>`;
+    root.innerHTML=h;
+    const lg=root.querySelector("#log"); lg.scrollTop=lg.scrollHeight;
+    const chips=[...root.querySelectorAll(".palette .chip")], cells=[...root.querySelectorAll(".cell")];
+    chips.forEach(e=>{
+      e.onclick=()=>{ pick=e.dataset.id; fidx=focusables.indexOf(e); draw(); };
+      e.ondragstart=ev=>{ ev.dataTransfer.setData("text/plain",e.dataset.id); };
+    });
+    cells.forEach(e=>{
+      e.onclick=()=>{ const [c,r]=e.dataset.k.split(",").map(Number); fidx=focusables.indexOf(e); place(c,r); };
+      e.ondragover=ev=>ev.preventDefault();
+      e.ondrop=ev=>{ ev.preventDefault(); const id=ev.dataTransfer.getData("text/plain"); if(CHIPS[id]){ pick=id; const [c,r]=e.dataset.k.split(",").map(Number); place(c,r);} };
+    });
+    root.querySelector("#rg").onclick=()=>rot("g");
+    root.querySelector("#rr").onclick=()=>rot("r");
+    root.querySelector("#del").onclick=del;
+    root.querySelector("#ex").onclick=()=>{example();draw();};
+    root.querySelector("#clr").onclick=()=>{clearAll();draw();};
+    root.querySelector("#step").onclick=step;
+    root.querySelector("#reset").onclick=()=>{runAt=null;steps=0;log.length=0;addLog("Restarted.");draw();};
+    root.querySelectorAll(".sit input").forEach(i=>i.onchange=()=>{SIT[i.dataset.s]=i.checked;});
+    setFocusables([...chips,...cells,...root.querySelectorAll(".row .btn:not([disabled])"),...root.querySelectorAll(".sit input")],true);
+  }
+  example(); draw();
+};
+
+DEEP.factory = function(root){
+  const lines=[{p:"",n:0,lv:1},{p:"",n:0,lv:1}];
+  const designs=[["MY-OKE-1",182],["MY-OKE-2",240],["SCOUT",120]];
+  let proc=182, cap=80;
+  function turnsFor(p,c){ return Math.ceil(p/c); }
+  function draw(){
+    let h=`<p class="dim">A copy of Production. Pick a product and amount for an open line, open more lines and upgrade them, and see how many turns an OKE takes.
+      (Practice only: in the game, adding lines and upgrades cost funds.)</p><div class="rep"><div>
+      <div class="topbar"><span>Production</span><span>Turn 1</span><span>Funds 500000</span></div>
+      <table class="gt"><tr><th></th><th>Product</th><th>Amnt.</th><th>Level</th><th>Cap.</th></tr>`;
+    for(let i=0;i<6;i++){
+      const L=lines[i];
+      if(!L){ h+=`<tr class="locked"><td>${i+1}</td><td>------------</td><td>--</td><td>-</td><td>---</td></tr>`; continue; }
+      h+=`<tr><td>${i+1}</td><td><select data-i="${i}" class="pp"><option value="">------------</option>${designs.map(d=>`<option ${L.p===d[0]?"selected":""}>${d[0]}</option>`).join("")}<option ${L.p==="Ammo"?"selected":""}>Ammo</option></select></td>
+        <td><input type="number" min="0" max="99" value="${L.n}" data-i="${i}" class="nn" style="width:60px"></td><td>${L.lv}</td><td>${L.lv>1?100:80}</td></tr>`;
+    }
+    h+=`</table><div class="row"><button class="btn" id="add" ${lines.length<6?"":"disabled"}>ADD LINE</button>
+      <button class="btn" id="up" ${lines.some(l=>l.lv<2)?"":"disabled"}>UPGRADE LINE 1</button></div></div>
+      <div class="panel"><span class="cap">HOW LONG?</span>
+      <p>Design's <span class="hi">Proc.</span> <input type="number" id="proc" value="${proc}" min="1" max="999" style="width:70px"></p>
+      <p>Line's <span class="hi">Cap.</span> <select id="cap"><option ${cap===80?"selected":""}>80</option><option ${cap===100?"selected":""}>100</option></select> work per turn</p>
+      <p>One OKE is ready during turn <span class="on" style="font-size:20px">${turnsFor(proc,cap)}</span>
+      (${proc} work at ${cap} per turn; any leftover goes into the next one).</p>
+      <h3>Remember</h3><p>An OKE's cost is paid when it starts. Ammo is made on a line like an OKE. New units take ammo and fuel from the base, so keep some ammo coming.</p></div></div>`;
+    root.innerHTML=h;
+    root.querySelectorAll(".pp").forEach(s=>s.onchange=()=>{ lines[+s.dataset.i].p=s.value; const d=designs.find(x=>x[0]===s.value); if(d){proc=d[1];} draw(); });
+    root.querySelectorAll(".nn").forEach(s=>s.onchange=()=>{ lines[+s.dataset.i].n=Math.max(0,Math.min(99,+s.value||0)); });
+    root.querySelector("#add").onclick=()=>{ if(lines.length<6) lines.push({p:"",n:0,lv:1}); draw(); };
+    root.querySelector("#up").onclick=()=>{ const l=lines.find(l=>l.lv<2); if(l) l.lv=2; cap=100; draw(); };
+    root.querySelector("#proc").onchange=e=>{ proc=Math.max(1,+e.target.value||1); draw(); };
+    root.querySelector("#cap").onchange=e=>{ cap=+e.target.value; draw(); };
+    setFocusables([...root.querySelectorAll("select,input,.btn:not([disabled])")].filter(e=>!e.closest("header")),true);
+  }
+  draw();
+};
+
+DEEP.units = function(root){
+  const base=[{n:"CARD-27",a:120},{n:"CARD-28",a:50},{n:"CARD-27",a:120},{n:"CARD-27",a:120},{n:"CARD-28",a:50},{n:"CARD-27",a:120}];
+  let unit=[], stage="form", order=null, target=null;
+  const ORD={"Move":"Walks to the hex you pick, one step per turn.","Defend Base":"Goes to the base you pick and guards it. A guarded base can't simply be walked into.",
+    "Capture Base":"Goes to the base you pick and takes it. If an enemy unit is there, they fight first.","Patrol":"Walks around the area on its own.","Standby":"Stays where it is."};
+  const needsMap=o=>o==="Move"||o==="Defend Base"||o==="Capture Base";
+  function hexes(){
+    const cols=12, rows=7, r=20; let s="";
+    for(let c=0;c<cols;c++) for(let rr=0;rr<rows;rr++){
+      const cx=30+c*r*1.5, cy=30+rr*r*1.732+(c%2?r*0.866:0), k=c+","+rr;
+      const mine=k==="1,3", foe=k==="10,2", empty=k==="6,5";
+      const fill = k===target?"#f2b028": mine?"#2c5cbf": foe?"#a83242": empty?"#6a6a6a":"#1d3a2a";
+      s+=`<polygon data-k="${k}" points="${hexPath(cx,cy,r-1)}" fill="${fill}" stroke="#3e6e52"/>`;
+      if(mine||foe||empty) s+=txt(cx,cy+5,"B",{anchor:"middle",fill:"#fff",size:13,weight:"bold"});
+    }
+    return svg(30+cols*r*1.5+10, 30+rows*r*1.732+20, s);
+  }
+  function draw(){
+    let h="";
+    if(stage==="form"){
+      h=`<p class="dim">Step 1: Form Unit. Click OKEs on the right to put them in the unit (up to 3), or press AUTO. Click one in the unit to take it out.</p>
+      <div class="rep"><div class="gmenu" style="display:block"><div class="title">Unit No. 1</div>${[0,1,2].map(i=>unit[i]!==undefined?`<div class="it" data-u="${i}">${base[unit[i]].n} &nbsp; ammo ${base[unit[i]].a}</div>`:`<div class="it off">(empty)</div>`).join("")}
+        <div class="row"><button class="btn" id="rel">RELEASE</button><button class="btn" id="auto">AUTO</button><button class="btn primary" id="done" ${unit.length?"":"disabled"}>DONE &gt;</button></div></div>
+      <div class="gmenu" style="display:block"><div class="title">OKEs at Base No. 3</div>${base.map((b,i)=>unit.includes(i)?"":`<div class="it" data-b="${i}">${b.n} &nbsp; ammo ${b.a}</div>`).join("")}</div></div>
+      <p>The unit fills up with ammo and fuel from the base's stock when you leave this screen. Forming a unit costs no funds, but the unit does nothing until it gets an order.</p>`;
+    } else {
+      h=`<p class="dim">Step 2: Deploy Units. Pick an order${order&&needsMap(order)?", then click a hex on the map":""}.</p>
+      <div class="rep"><div><div class="topbar"><span>Unit No. 1</span><span>Turn 1</span></div><div class="gmenu">${Object.keys(ORD).map(o=>`<div class="it${o===order?" sel":""}" data-o="${o}">${o}</div>`).join("")}</div>
+      <div class="row"><button class="btn" id="backForm">&lt; BACK TO FORM UNIT</button></div></div>
+      <div class="panel"><span class="cap">MAP</span><div class="hexwrap">${hexes()}</div>
+      <p>${order?`<span class="hi">${order}:</span> ${ORD[order]}`:"Blue B = your base, red B = enemy base, grey B = empty base."}</p>
+      <p class="${target||(order&&!needsMap(order))?"on":"dim"}">${order? (needsMap(order)? (target?"Order given. On End Turn the unit sets off.":"Now click the target hex.") : "Order given.") : ""}</p></div></div>`;
+    }
+    root.innerHTML=h;
+    root.querySelectorAll("[data-b]").forEach(e=>e.onclick=()=>{ if(unit.length<3) unit.push(+e.dataset.b); draw(); });
+    root.querySelectorAll("[data-u]").forEach(e=>e.onclick=()=>{ unit.splice(+e.dataset.u,1); draw(); });
+    root.querySelectorAll("[data-o]").forEach(e=>e.onclick=()=>{ order=e.dataset.o; target=null; draw(); });
+    root.querySelectorAll("polygon[data-k]").forEach(e=>e.onclick=()=>{ if(order&&needsMap(order)){ target=e.dataset.k; draw(); } });
+    const q=id=>root.querySelector(id);
+    if(q("#rel")) q("#rel").onclick=()=>{unit=[];draw();};
+    if(q("#auto")) q("#auto").onclick=()=>{unit=[0,1,2];draw();};
+    if(q("#done")) q("#done").onclick=()=>{stage="orders";fidx=0;draw();};
+    if(q("#backForm")) q("#backForm").onclick=()=>{stage="form";fidx=0;draw();};
+    setFocusables([...root.querySelectorAll(".gmenu .it:not(.off),.btn:not([disabled])")].filter(e=>!e.closest("header")),true);
+  }
+  draw();
+};
+
+/* ---------------- keyboard and controller ---------------- */
+function act(what){
+  if(what==="next"){ if(S.lesson&&S.mode==="quick") slideStep(1); return; }
+  if(what==="prev"){ if(S.lesson&&S.mode==="quick") slideStep(-1); return; }
+  if(what==="up"||what==="left"){ moveFocus(-1); syncFocus(); return; }
+  if(what==="down"||what==="right"){ moveFocus(1); syncFocus(); return; }
+  if(what==="ok"){ const el=focusables[fidx]; if(el){ if(el.tagName==="INPUT"&&el.type==="checkbox"){el.checked=!el.checked;el.dispatchEvent(new Event("change"));} else el.click(); } return; }
+  if(what==="back"){
+    const body=document.getElementById("body");
+    if(S.lesson && S.mode==="deep" && body && body._back && body._back()) return;
+    if(S.lesson){ go("#"); return; }
+  }
+}
+function syncFocus(){
+  const body=document.getElementById("body");
+  if(S.lesson && S.mode==="quick"){
+    const sl=S.lesson.slides[S.slide], n=(sl.spots||[]).length;
+    if(fidx<n){ S.spot=fidx; const keep=fidx; renderSlide(); fidx=keep; paintFocus(); }
+  } else if(body && body._focusSync) body._focusSync();
+}
+document.addEventListener("keydown",e=>{
+  const t=e.target.tagName;
+  if(t==="SELECT"||(t==="INPUT"&&e.target.type!=="checkbox")) return;
+  const quick=S.lesson&&S.mode==="quick";
+  const map={ArrowLeft:quick?"prev":"left",ArrowRight:quick?"next":"right",ArrowUp:"up",ArrowDown:"down",Enter:"ok"," ":"ok",Escape:"back",Backspace:"back",PageUp:"prev",PageDown:"next"};
+  const a=map[e.key]; if(!a) return;
+  e.preventDefault(); act(a);
+});
+/* Controller: standard mapping. D-pad / left stick move, A ok, B back, LB / RB slides. */
+const pads={};
+function pollPads(){
+  const list=navigator.getGamepads?navigator.getGamepads():[];
+  for(const gp of list){ if(!gp) continue;
+    const prev=pads[gp.index]||{};
+    const quick=S.lesson&&S.mode==="quick";
+    const now={
+      up: gp.buttons[12]&&gp.buttons[12].pressed || gp.axes[1]<-0.6,
+      down: gp.buttons[13]&&gp.buttons[13].pressed || gp.axes[1]>0.6,
+      left: gp.buttons[14]&&gp.buttons[14].pressed || gp.axes[0]<-0.6,
+      right: gp.buttons[15]&&gp.buttons[15].pressed || gp.axes[0]>0.6,
+      ok: gp.buttons[0]&&gp.buttons[0].pressed, back: gp.buttons[1]&&gp.buttons[1].pressed,
+      prev: gp.buttons[4]&&gp.buttons[4].pressed, next: gp.buttons[5]&&gp.buttons[5].pressed };
+    for(const k in now){ if(now[k]&&!prev[k]){
+      if(quick&&k==="left") act("prev"); else if(quick&&k==="right") act("next"); else act(k);
+    } }
+    pads[gp.index]=now;
+  }
+  requestAnimationFrame(pollPads);
+}
+requestAnimationFrame(pollPads);
+
+/* Links: #lesson (slide 1), #lesson/quick/N (slide N), #lesson/deep. */
+route();
+</script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-/* Carnage Heart launcher menu: LAUNCH GAME, ONLINE PLAY, SHARE DATA, UPDATE,
+/* Carnage Heart launcher menu: LAUNCH GAME, ONLINE PLAY, SHARE DATA, TUTORIALS, UPDATE,
  * SETTINGS, plus the automatic update countdown when the launcher opens.
  *
  * Included into recomp-ui's launcher_imgui.cpp by cmake/ch_launcher_menu.cmake
@@ -776,12 +776,12 @@ static void draw_apk_page(LauncherModel* m, const Gfx& g, const Input& in) {
 
 /* ---- main page ------------------------------------------------------------- */
 
-enum MainEntry { MAIN_LAUNCH = 0, MAIN_ONLINE, MAIN_SHARE, MAIN_UPDATE, MAIN_ANDROID, MAIN_SEND_APK,
+enum MainEntry { MAIN_LAUNCH = 0, MAIN_ONLINE, MAIN_SHARE, MAIN_TUTORIALS, MAIN_UPDATE, MAIN_ANDROID, MAIN_SEND_APK,
                  MAIN_SETTINGS, MAIN_EXIT };
 
 static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
     struct Entry { MainEntry id; const char* label; const char* info; };
-    Entry entries[9];
+    Entry entries[10];
     int count = 0;
     const bool install = needs_install(m);
     if (m->in_session)
@@ -800,6 +800,12 @@ static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
             "shared campaign map where you take turns." };
         entries[count++] = { MAIN_SHARE, "SHARE DATA",
             "Trade OKE designs and chip programs with other players." };
+        if (ch_update::tutorials_available())
+            entries[count++] = { MAIN_TUTORIALS, "TUTORIALS",
+                "How to play, in your web browser (works without the internet). "
+                "Each lesson has a QUICK GUIDE (a few slides) and an IN-DEPTH LOOK "
+                "where you can try things: a practice chip grid and copies of the "
+                "game's menus to click through." };
         entries[count++] = { MAIN_UPDATE, "UPDATE",
             "Look for a newer version and install it when you choose. Your disc, "
             "saves and settings are not touched." };
@@ -907,6 +913,11 @@ static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
         case MAIN_LAUNCH:   launch_game(m); break;
         case MAIN_ONLINE:   open_page(PAGE_ONLINE); break;
         case MAIN_SHARE:    open_page(PAGE_SHARE); break;
+        case MAIN_TUTORIALS: {
+            std::string why;
+            note(ch_update::open_tutorials(&why) ? "TUTORIALS OPENED IN YOUR WEB BROWSER" : why.c_str());
+            break;
+        }
         case MAIN_UPDATE:   open_page(PAGE_UPDATE); break;
         case MAIN_ANDROID: {
             std::string why;

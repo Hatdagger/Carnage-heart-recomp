@@ -68,4 +68,11 @@ bool android_builder_available();
 std::string kit_folder();
 bool start_android_build(std::string* why);
 
+/* TUTORIALS: the lesson pages shipped in the kit (tutorials/index.html, plain
+ * HTML that works offline). tutorials_available() is true when the page is
+ * there; open_tutorials() opens it in the system's web browser and returns at
+ * once; false with the reason when it can't. */
+bool tutorials_available();
+bool open_tutorials(std::string* why);
+
 } /* namespace ch_update */

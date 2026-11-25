@@ -30,7 +30,7 @@ for f in CMakeLists.txt game.toml game_options.toml VERSION symbols.toml \
          codegen_setup.c codegen_setup.h README.md; do
   [[ -e "${ROOT}/${f}" ]] && PROJECT_ARGS+=(--project-file "${f}")
 done
-for d in seeds src assets mods launcher cmake android scripts; do
+for d in seeds src assets mods launcher cmake android scripts tutorials; do
   [[ -d "${ROOT}/${d}" ]] && PROJECT_ARGS+=(--project-dir "${d}")
 done
 

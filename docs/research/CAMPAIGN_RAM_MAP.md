@@ -136,7 +136,14 @@ Command menu > Negotiation. Mapped from the code (`0x8004BBB8` and the screens a
 | `0x800E00B4` | **Companies**, 6 x 8: +00 u16 goodwill (max 60000), +02 u16 purchases (recent), +04 u16 (1 or 2, fixed), +06 u16 flags (bit 0: the player funded a blueprint here that was finished) |
 | `0x80128040` | 6 x s16: Information asked at that company this turn (cleared at End Turn) |
 
-Globals: `0x800DF394` **market stance** -2..+2 (End Turn, `0x8004B9F4`: from the share of bases the player holds and a battle ratio `0x800DF398`/`0x800DF39C`); +2 = player winning. `0x800DF788` (gp+0x430) turn of the CPU's last big purchase.
+Globals: `0x800DF394` **market stance** -2..+2; +2 = player winning. Worked out by `0x8004B9F4` (step 1 of End Turn, and once when the map opens):
+- bases = the player's share of the owned bases (table `*0x800E0154`, owner byte 1 / nonzero), 0-10, or 5 when no base is owned;
+- battles = (`0x800DF398` / 10) x 10 / (`0x800DF39C` / 10), or 0 before 10 battles;
+- stance = bases / 2 - 2 without a battle score, otherwise (bases + battles) / 4 - 2, kept within -2..+2. (It also clears `0x800DF3B0` when that is nonzero and not the player's base count.)
+- `0x800DF39C` = **battles fought**: +1 in `0x80035CD4` just before the battle engine `0x8001CF48` is called (`0x80035FFC`), for every battle, either side attacking.
+- `0x800DF398` = **enemy units wiped out**: +1 in the clean-up after a battle, `0x80035988`, when a unit with no OKEs left is deleted and its owner byte is 2 (`0x80035AEC`). The player's own losses are not counted anywhere.
+- Both are set to 0 by the map set-up `0x80037240` (`0x800371C0`) and kept in the save file (written `0x800393CC`, read `0x800392BC`).
+- Online, turn files version 5 carry both (`src/turn_files.c`), and hot-seat keeps each side's `0x800DF398`; see MULTIPLAYER_PLAN.md. `0x800DF788` (gp+0x430) turn of the CPU's last big purchase.
 
 ### Blueprint state (4 bytes)
 | Bits | Meaning |

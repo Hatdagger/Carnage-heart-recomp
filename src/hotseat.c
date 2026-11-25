@@ -63,6 +63,7 @@
 #define GP_TURN2        0x800DF380u
 #define GP_FUNDS_PLAYER 0x800DF38Cu
 #define GP_FUNDS_CPU    0x800DF390u
+#define GP_KILLS        0x800DF398u   /* enemy units wiped out: the market stance (turn_files.c) */
 #define GP_CUR_BASE     0x800DF404u
 #define PTR_PLAYER_CARD 0x800E0014u
 #define PTR_OKE_TABLE   0x800E014Cu
@@ -105,6 +106,7 @@ static uint8_t g_snap_okes[OKE_COUNT][OKE_SIZE];
 static uint32_t g_snap_funds;
 static int g_snapped;
 static uint32_t g_other_base;
+static uint32_t g_other_kills;   /* the waiting side's kills (0x800DF398); battles are shared */
 
 int ch_hotseat_active(void)
 {
@@ -192,6 +194,7 @@ static void setup(CPUState *cpu)
     }
     cpu->write_word(GP_FUNDS_CPU, cpu->read_word(GP_FUNDS_PLAYER));
     g_other_base = (uint32_t)first_base_of(cpu, 2);
+    g_other_kills = 0;
     g_side = 0;
     g_ready = 1;
     ch_neg_setup(cpu);
@@ -277,6 +280,12 @@ static void swap_sides(CPUState *cpu)
     const uint32_t f1 = cpu->read_word(GP_FUNDS_PLAYER), f2 = cpu->read_word(GP_FUNDS_CPU);
     cpu->write_word(GP_FUNDS_PLAYER, f2);
     cpu->write_word(GP_FUNDS_CPU, f1);
+
+    /* The kill counter (enemy units wiped out, for the market stance) is
+     * each side's own; the battle counter is the same for both. */
+    const uint32_t k = cpu->read_word(GP_KILLS);
+    cpu->write_word(GP_KILLS, g_other_kills);
+    g_other_kills = k;
 
     static uint8_t tmp[CARD_SIZE];
     for (int c = 0; c < CARD_SLOTS; c++) {

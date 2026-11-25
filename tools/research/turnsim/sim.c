@@ -257,11 +257,13 @@ void ch_remote_lle_func_80035CD4(CPUState *c)
 {   /* the battle: side 1 loses 30-69 HP per OKE, side 2 160-239 (from rand,
      * so a replay only matches if it starts from the same seed) */
     const uint32_t u1 = c->gpr[4], u2 = c->gpr[5];
+    ww(0x800DF39Cu, rw(0x800DF39Cu) + 1);   /* battles, as the game counts them */
     for (int side = 0; side < 2; side++) {
         uint32_t u = U(side ? u2 : u1);
         for (int s = 0; s < 3; s++) {
             int16_t k = (int16_t)rh(u + 12 + 2 * s);
             int dmg = side ? 160 + sim_rand() % 80 : 30 + sim_rand() % 40;
+            if (side && getenv("SIM_LETHAL")) dmg += 400;   /* side 2 is wiped out */
             if (k >= 0) wh(O(k) + 6, (uint16_t)((int16_t)rh(O(k) + 6) - dmg));
         }
     }
@@ -275,7 +277,10 @@ void ch_remote_lle_func_80035988(CPUState *c)
         if (k < 0) continue;
         if ((int16_t)rh(O(k) + 6) <= 0) { wb(O(k), 0); wh(u + 12 + 2 * s, 0xFFFF); } else left++;
     }
-    if (!left) wb(u, 0);
+    if (!left) {
+        if (rb(u) == 2) ww(0x800DF398u, rw(0x800DF398u) + 1);   /* an enemy unit wiped out */
+        wb(u, 0);
+    }
 }
 
 static void init(int role)

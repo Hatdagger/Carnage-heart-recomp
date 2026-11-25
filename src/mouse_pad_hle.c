@@ -62,21 +62,37 @@ static uint32_t list_ra, list_seen = 0xFFFFFF00u;
 #define BATTLE_MODE   0x800DF3D0u /* 0 = test battle (Start: status list) */
 #define BATTLE_PADS   0x800DF3D8u /* 2 = two players: L2 / Start don't switch OKE */
 
-/* For the opponent's-turn replay (src/turn_files.c): 1 on a fresh press of
- * Start, Cross or Circle, or a click / tap. While the replay runs the hook
- * calls the game's routines directly, so the game's own pad routine (above)
- * may not run; then the port-1 buffer, which the BIOS fills on every VBlank,
- * is read here instead, and the window pointer / touch is asked directly.
- * arm = 1 at the start of the replay: buttons already held (the End Turn
- * press) don't count until they are let go. */
+/* For the opponent's-turn replay (src/turn_files.c): a fresh press of
+ * Start, Cross or Circle, or a click / tap, skips it. The replay checks
+ * between their units, but one unit's step (its walk on the map, a battle)
+ * is a game routine that runs for many frames, so a press is noted whenever
+ * the game reads the pad during the replay (skip_see, from func_8003E154
+ * below) and reported at the next check. When the game's pad routine has
+ * not run since the last check, the port-1 buffer (filled by the BIOS on
+ * every VBlank) and the window pointer / touch are read directly instead.
+ *   arm 1: the replay starts; buttons already held (the End Turn press)
+ *          don't count until they are let go.
+ *   arm 0: 1 if skip was pressed since the last check.
+ *   arm 2: the replay is over; stop watching. */
 #define SKIP_BUTTONS  (0x0800u | 0x0040u | 0x0020u)   /* Start, Cross, Circle */
+static int skip_watch, skip_latched;
+static uint32_t skip_prev;
+static void skip_see(uint32_t b)
+{
+    b &= SKIP_BUTTONS;
+    if (skip_watch && (b & ~skip_prev)) skip_latched = 1;
+    skip_prev = b;
+}
+
 int ch_replay_skip_poll(CPUState *cpu, int arm)
 {
-    static uint32_t prev, seen_reads;
+    static uint32_t seen_reads;
+    if (arm == 2) { skip_watch = 0; skip_latched = 0; return 0; }
     uint32_t b = 0;
-    if (pad_reads != seen_reads) {
-        seen_reads = pad_reads;                   /* the game read the pad itself */
-        b = cpu->read_word(PAD_BUTTONS);
+    const int game_read = pad_reads != seen_reads;
+    seen_reads = pad_reads;
+    if (game_read) {
+        b = cpu->read_word(PAD_BUTTONS);          /* already seen by skip_see */
     } else {
         const uint8_t status = cpu->read_byte(PAD1_BUF), type = cpu->read_byte(PAD1_BUF + 1) & 0xF0u;
         const uint8_t b2 = cpu->read_byte(PAD1_BUF + 2), b3 = cpu->read_byte(PAD1_BUF + 3);
@@ -90,9 +106,15 @@ int ch_replay_skip_poll(CPUState *cpu, int arm)
             b |= pf.buttons;
         }
     }
-    b &= SKIP_BUTTONS;
-    const int hit = !arm && (b & ~prev) != 0;
-    prev = b;
+    if (arm) {
+        skip_prev = b & SKIP_BUTTONS;
+        skip_latched = 0;
+        skip_watch = 1;
+        return 0;
+    }
+    if (!game_read) skip_see(b);
+    const int hit = skip_latched;
+    skip_latched = 0;
     return hit;
 }
 
@@ -186,6 +208,7 @@ void func_8003E154(CPUState *cpu)
 
     /* Shared tail: hold-repeat handling (unchanged). */
     buttons = cpu->read_word(PAD_BUTTONS);
+    skip_see(buttons);   /* a skip press during the opponent's-turn replay */
     if ((buttons & 0xFFFu) != 0 && cpu->read_word(REPEAT_FLAG) == 1u)
         cpu->write_word(PAD_BUTTONS, buttons & 0xF000u);
     else

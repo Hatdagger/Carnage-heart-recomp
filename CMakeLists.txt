@@ -11,6 +11,17 @@ endif()
 
 project(CarnageHeartRecomp LANGUAGES C CXX)
 
+# Built with the portable compiler pack on Linux (Steam Deck: the AppImage
+# fetches it, since SteamOS has no build tools). The pack compiles against its
+# own sysroot, but CMake can still find a host library whose headers the
+# compiler then can't see (OpenSSL's evp.h broke the build on a bare Arch
+# system). Both are optional: SHA-256 falls back to the portable code and the
+# launcher to its built-in font path.
+if(CMAKE_SYSROOT AND UNIX AND NOT APPLE AND NOT ANDROID)
+    set(CMAKE_DISABLE_FIND_PACKAGE_OpenSSL ON)
+    set(CMAKE_DISABLE_FIND_PACKAGE_Freetype ON)
+endif()
+
 # Android (arm64 APK, built by scripts/android/build_apk.py): turns off the
 # desktop-only surfaces and makes the game a libmain.so for SDLActivity.
 if(ANDROID)

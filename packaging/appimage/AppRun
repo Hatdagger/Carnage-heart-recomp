@@ -1,0 +1,148 @@
+#!/bin/sh
+# Carnage Heart Recompiled: AppImage entry point (Steam Deck and other Linux).
+#
+# The AppImage holds the Linux setup kit (launcher + setup wizard + project
+# sources + recompiler, no game code). An AppImage is read-only, but the kit
+# builds the game from the player's disc into its own folder, so the first
+# start copies the kit into a normal folder and runs it from there:
+#
+#   <folder of the AppImage>/CarnageHeart/      (or ~/Games/CarnageHeart when
+#                                                that folder can't be written;
+#                                                CH_GAME_DIR overrides both)
+#
+# Later starts run straight from that folder. A newer AppImage copies its
+# newer kit over the old one (the player's settings, saves, memory cards and
+# disc are kept); an older AppImage never replaces a newer kit, so updates
+# made from the launcher's UPDATE page stay.
+#
+# The disc: put the Carnage Heart (USA) .cue and its .bin files beside the
+# AppImage (or in CarnageHeart/disc/). Files beside the AppImage are linked
+# into CarnageHeart/disc/, where the setup wizard finds them.
+#
+# CH_APPIMAGE_INSTALL_ONLY=1 copies, links and gets the compiler pack, prints
+# the folder and exits; CH_SKIP_TOOLCHAIN=1 skips the compiler pack (both
+# used by CI).
+set -eu
+
+HERE="$(dirname "$(readlink -f "$0")")"
+KIT="$HERE/usr/share/carnageheart/kit"
+EXE_NAME="CarnageHeart_Recompiled"
+SELF="${APPIMAGE:-$HERE}"
+BESIDE="$(dirname "$SELF")"
+
+say() { printf 'Carnage Heart: %s\n' "$*" >&2; }
+
+can_write() {
+    mkdir -p "$1" 2>/dev/null && [ -w "$1" ]
+}
+
+GAME="${CH_GAME_DIR:-}"
+if [ -z "$GAME" ]; then
+    GAME="$BESIDE/CarnageHeart"
+    can_write "$GAME" || GAME="${HOME:-/tmp}/Games/CarnageHeart"
+fi
+can_write "$GAME" || { say "can't write to $GAME (set CH_GAME_DIR)"; exit 1; }
+
+read_ver() { if [ -f "$1" ]; then tr -d '[:space:]' < "$1"; fi; }
+kit_ver="$(read_ver "$KIT/VERSION")"; kit_ver="${kit_ver:-0}"
+have_ver="$(read_ver "$GAME/VERSION")"
+
+# Newer = sorts last with sort -V and differs.
+newer() {
+    [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1)" = "$1" ]
+}
+
+# Files the player owns: kept when a newer kit is copied over.
+KEEP="disc.cfg bios.cfg rom.cfg launcher.ini launcher-window.ini config.ini
+settings.toml keybinds.ini input.ini overlay_captures.json"
+
+install_kit() {
+    say "installing version $kit_ver into $GAME"
+    keep="$GAME/.ch-keep"
+    rm -rf "$keep"; mkdir -p "$keep"
+    for f in $KEEP; do if [ -f "$GAME/$f" ]; then cp -p "$GAME/$f" "$keep/$f"; fi; done
+    # cp without -p: copied files get the current time, so the game's build
+    # never takes them for already compiled.
+    cp -R "$KIT/." "$GAME/"
+    for f in $KEEP; do if [ -f "$keep/$f" ]; then cp -p "$keep/$f" "$GAME/$f"; fi; done
+    rm -rf "$keep"
+    chmod +x "$GAME/$EXE_NAME" 2>/dev/null || true
+    if [ -n "$have_ver" ]; then
+        # An older install: make the game again from the disc with the new
+        # recompiler (the setup exe does that when generated/ is missing).
+        rm -rf "$GAME/generated"
+    fi
+    printf 'appimage %s\n' "$kit_ver" > "$GAME/.installed-from"
+}
+
+if [ ! -x "$GAME/$EXE_NAME" ] || [ -z "$have_ver" ] || newer "$kit_ver" "$have_ver"; then
+    install_kit
+fi
+
+# Link a disc found beside the AppImage into disc/, unless one is there.
+link_disc() {
+    ls "$GAME"/disc/*.cue >/dev/null 2>&1 && return 0
+    ls "$GAME"/*.cue >/dev/null 2>&1 && return 0
+    for cue in "$BESIDE"/*.cue; do
+        [ -f "$cue" ] || continue
+        case "$(basename "$cue")" in *[Cc]arnage*) ;; *) continue ;; esac
+        mkdir -p "$GAME/disc"
+        ln -sf "$cue" "$GAME/disc/$(basename "$cue")"
+        # Every track the .cue names (FILE "name" BINARY).
+        sed -n 's/^[[:space:]]*FILE[[:space:]]*"\(.*\)".*/\1/p' "$cue" | tr -d '\r' |
+        while IFS= read -r track; do
+            if [ -f "$BESIDE/$track" ]; then ln -sf "$BESIDE/$track" "$GAME/disc/$track"; fi
+        done
+        say "using the disc beside the AppImage: $(basename "$cue")"
+        return 0
+    done
+    return 0
+}
+link_disc
+
+# Build tools. The kit builds the game on this machine. SteamOS has no
+# CMake, Ninja or C compiler, and this framework version only downloads its
+# portable compiler pack on Windows, so fetch the pack once here (into
+# ~/.local/share/CarnageHeart/toolchain; CH_TOOLCHAIN_DIR overrides) and put
+# it first on PATH. The pack brings clang with its own system headers and a
+# prebuilt SDL3, so nothing has to be installed on the system.
+have() { command -v "$1" >/dev/null 2>&1; }
+native_tools() {
+    have cmake && have ninja && { have cc || have gcc || have clang; } &&
+        { have c++ || have g++ || have clang++; }
+}
+TC="${CH_TOOLCHAIN_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/CarnageHeart/toolchain}"
+if [ "${CH_SKIP_TOOLCHAIN:-0}" != 1 ] && { [ -x "$TC/bin/cmake" ] || ! native_tools; }; then
+    if [ ! -x "$TC/bin/cmake" ]; then
+        say "no build tools on this system: getting the compiler pack (once)"
+        GET="$HERE/usr/share/carnageheart/get_toolchain.py"
+        if have zenity && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+            python3 "$GET" "$TC" ${CH_TOOLCHAIN_URL:+"$CH_TOOLCHAIN_URL"} | zenity --progress --auto-close --no-cancel \
+                --title="Carnage Heart" --width=420 \
+                --text="Getting the compiler pack (about 830 MB, only once)" || true
+        else
+            python3 "$GET" "$TC" ${CH_TOOLCHAIN_URL:+"$CH_TOOLCHAIN_URL"} | while IFS= read -r line; do
+                case "$line" in "# "*) say "${line#\# }" ;; esac
+            done
+        fi
+        if [ ! -x "$TC/bin/cmake" ]; then
+            msg="Could not get the compiler pack. Check the internet connection and start Carnage Heart again."
+            if have zenity && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+                zenity --error --title="Carnage Heart" --text="$msg" || true
+            fi
+            say "$msg"
+            exit 1
+        fi
+    fi
+    PATH="$TC/bin:$PATH"
+    RETCOMM_TOOLCHAIN_DIR="$TC"
+    export PATH RETCOMM_TOOLCHAIN_DIR
+fi
+
+if [ "${CH_APPIMAGE_INSTALL_ONLY:-0}" = 1 ]; then
+    printf '%s\n' "$GAME"
+    exit 0
+fi
+
+cd "$GAME"
+exec "./$EXE_NAME" "$@"

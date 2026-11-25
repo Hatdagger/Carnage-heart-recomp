@@ -1,6 +1,6 @@
 # Carnage Heart ReComp: Multiplayer Plan
 
-Researched 2026-11-21, updated 2026-11-24 (Android Online screen and notifications; launcher shows the scenario; launcher Online screen, catching up when the map opens), 2026-11-23 after the first real two-copy test, and 2026-11-22 after the campaign RAM mapping, the VS/saves mapping, the hot-seat test and the first turn files (see [CAMPAIGN_RAM_MAP.md](CAMPAIGN_RAM_MAP.md) and [VS_MODE_AND_SAVES.md](VS_MODE_AND_SAVES.md)).
+Researched 2026-11-21, updated 2026-11-24 (session 6: replay of the opponent's turn; Android Online screen and notifications; launcher shows the scenario; launcher Online screen, catching up when the map opens), 2026-11-23 after the first real two-copy test, and 2026-11-22 after the campaign RAM mapping, the VS/saves mapping, the hot-seat test and the first turn files (see [CAMPAIGN_RAM_MAP.md](CAMPAIGN_RAM_MAP.md) and [VS_MODE_AND_SAVES.md](VS_MODE_AND_SAVES.md)).
 
 **Priority (decided 2026-11-21): campaign versus (Option C) comes first.** VS mode (Options A and B) is less important and comes later.
 
@@ -90,7 +90,7 @@ Details:
 - **Chain check**: each file records which state it was played from (a hash of the previous file's tables). If it is not the state the receiver sent, the log says DESYNC and the file is loaded anyway, which puts both copies back in step.
 - **Starting and resuming**: the first End Turn after the game starts only receives (my units are held still and nothing is sent), unless I am A and the folder is empty, which starts a new game. So B begins by pressing End Turn once, and either player can close the game, start Europa again (loading their own save brings their designs back) and press End Turn to catch up.
 - **Game over**: when a side has no bases left, the last file is sent with a game-over flag; the receiver loads it and the game shows its win or lose screen.
-- **What the receiver sees**: the enemy's units jump to their new places, and the log lists what the enemy did ("their unit 32: formed, capture a base", "battle at (x,y): their unit 33 attacked your unit 2. Theirs: 420HP... Yours: ...").
+- **What the receiver sees**: ~~the enemy's units jump to their new places~~ since step 7 (below) the enemy's moves and battles are replayed on screen; the log also lists what the enemy did ("their unit 32: formed, capture a base", "battle at (x,y): their unit 33 attacked your unit 2. Theirs: 420HP... Yours: ...").
 
 Tested with `tools/research/turnsim/run.sh`: the real `turn_files.c`, `hotseat.c` and `remote_battle.c` running in two processes on a fake RAM, with a stand-in End Turn that calls the hooks in the game's order. Checked over 8 rounds: each copy sees the other side exactly as its owner left it (units, OKE HP, funds, bases), turn numbers match, the CPU brain never runs, units only move on their owner's turn, a battle's result reaches the other copy, a player who quits and restarts catches up, and the game-over file ends both games.
 
@@ -167,6 +167,27 @@ Why "switch off" rather than "refuse to start": the map is already open when the
 
 **Tested**: simulator (`turnsim/run.sh`, two new cases: a copy started on Europa against a Europa (Practice) game loads and sends nothing; a new game started on Ganymede writes no turn file); the real two-copy online test (`online_demo.py`) still plays through to victory/defeat with no desyncs, and its logs show "map start: Europa (Practice), as in the turn files"; and in the real game, a copy started on Europa against that game's turn files said "Europa started, but this online game is on Europa (Practice)", loaded nothing and wrote no file, and its End Turn ran as a normal campaign. (The bottom line itself is not in headless screenshots; the log shows it was set.)
 
+### Replay: watch what the opponent did (2026-11-24, session 6, step 7)
+Branch `enemy-replay` (on main after PR #9). When the opponent's turn arrives, their units now walk across the map and **their battles are fought again on screen**, then the turn file's end state is loaded exactly as before. Screenshots: `docs/screenshots/replay-enemy-move.png` (the red enemy unit stepping on the hex map), `docs/screenshots/replay-enemy-battle.png` (the map, then the replayed 3D battle).
+
+How it works (`src/turn_files.c`, `src/remote_battle.c`, `src/hotseat.c`, new `src/turn_replay.c`):
+- **Turn files are version 3.** Two parts are added at the end of the body: the **start tables** (units, bases, OKEs and funds when the sender pressed End Turn, after their orders and before any unit moved; same layout as the tables, receiver's point of view) and a **random seed for each battle**. About 43 KB a file (was 37 KB). Version 2 files are still read (no replay). Header unchanged, so the launcher and Android app need no change.
+- **The game's own unit step drives the replay.** End Turn (`0x8001B8EC`) starts with `0x800341FC` (rebuilds a per-hex table at `*0x800E00C8` from the units), then for each unit with a nonzero owner byte calls `0x80034C38(unit)`, `0x8001BCB0(2)`, `0x8001C000(unit)`. The replay writes the start tables into RAM and calls the same routines for the opponent's units 32-63, with the hook as the return address (the same trick as the waiting loop's VSync). It runs at the swap point (the turn arrives while waiting) and at the map start (the game was opened after the opponent played). Without `0x800341FC` first, a unit walking onto an enemy unit found no one there at map start.
+- **A half-second pause after each enemy unit's step** (`CH_TURN_REPLAY_PAUSE` frames, default 30), so the player sees each move. `CH_TURN_REPLAY=0` turns the replay off.
+- **Battles are fought again, the same way.** The game's `rand()` goes through one stub, `0x8008E1E4` (BIOS A0:2F, 140 callers). While online, `turn_replay.c` keeps its own seed (same formula as the BIOS), and every battle on the sender's device starts from a fresh seed that goes in the turn file. In the replay, RAM is turned round to the sender's point of view for the battle (`ch_hotseat_swap_view`: units i <-> i+32, owner bytes, funds, card tables), their unit is side 1 again with the same unit numbers, and the same seed is set. **The battle then plays out exactly as it did for them.** The recorded HP and kills are written over the result anyway, and RAM is turned back before the game's result code runs. So the replay can never change the game: if it ever went differently, the log says so and the recorded result stands.
+- Also found: base fuel each End Turn is random (`rand()` in the base loop of `0x8001B8EC`), and base repair (+20% HP) also reaches OKEs **in a unit standing on its own base**, not only stored ones.
+
+**Tested**
+- Simulator (`turnsim/run.sh`): now plays the hooks' game-routine calls (VSync, `0x800341FC`, the three unit routines) and its stand-in battle uses `rand()`. Every opponent turn is replayed; the replayed battle gives the recorded result; units end where the turn file says. All earlier checks still pass.
+- **Real game, two copies, local relay** (new `tools/research/replay_demo.py`): A defends, B attacks; on A's turn 4 they fight on A's copy. **B's replay of that battle went exactly as recorded** (same HP and kills), both when the turn arrived while B was waiting and when B was closed and opened the game after A had played (`REPLAY_RESTART=1`: the battle is replayed when the map opens). In 12 replays per run, every unit ended where the turn file says; no desyncs.
+- `online_demo.py` (restarts, empty folder, close after sending, game over) still passes.
+- Not tested: Android (no devkit access in this session; same code, `CH_REMOTE_BATTLE` is on there), a real window (headless here), the real Cloudflare relay with version-3 files (the relay only checks "CHTF" and size; 43 KB is under its 64 KB limit).
+
+Known gaps
+- **Both players need the new build**: an older build refuses version-3 turn files ("update the game"). Games already in progress carry on (the new build reads version 2; replays start with the first version-3 file).
+- Only units, positions and battles are replayed. Production, research and base changes simply appear when the end state is loaded.
+- The replay can't be skipped yet (a button to skip would be a small addition).
+
 ### Saves and memory cards: mapped (2026-11-22)
 A campaign save is one 5-block file whose body is a straight copy of the campaign tables in RAM (cards, units, bases, OKEs, globals). No checksum found. A single design is one 1152-byte record at a known offset. See VS_MODE_AND_SAVES.md.
 
@@ -191,7 +212,7 @@ Branch `online-android`, **PR #9** (on top of v0.1.3 main, which already has PR 
 - The turn simulator (`turnsim/run.sh`, online cases included) still passes with the changed `turn_relay.c`.
 - The APK builds (sandbox devkit) and contains the online code.
 
-**Not tested yet**: anything on a device: the JNI path from the game's relay thread, the screen itself, the notification. Needs the owner's tablet (and a second copy: the desktop game or a second Android device).
+**Tested on a device (2026-11-24, owner)**: the test APK (signed with the owner's key) on the Lenovo Legion Tab Y700 Gen 2 — the owner reports multiplayer worked. PR #9 merged into main.
 
 Known gaps
 - The notification icon is the app icon (Android shows it as a plain shape in the status bar).
@@ -212,23 +233,41 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 3. ~~Map the player order screens (including re-orders) and factory data~~ (done 2026-11-22).
 4. ~~Local hot-seat test on one machine: end turn, swap sides, play the other side~~ (done 2026-11-22, `src/hotseat.c`).
 5. ~~Turn files: capture orders and battle results on one copy, apply them on a second copy~~ (done 2026-11-22, `src/turn_files.c`; tested in the real game 2026-11-23).
-6. ~~Waiting without freezing the game~~ and ~~storage: the turn relay~~ (done 2026-11-23). ~~Launcher Online screen, closing after sending, catching up on start (also from the relay on a new device), desktop "your turn" check~~ (done 2026-11-24). ~~Scenario check~~ (done 2026-11-24). ~~Real relay test~~ (done 2026-11-24, session 4). ~~Android: Online screen and notifications~~ (built 2026-11-24, session 5, PR #9). Next: test on a device.
-7. Optional: visual replay of the enemy's turn from the orders in the file.
+6. ~~Waiting without freezing the game~~ and ~~storage: the turn relay~~ (done 2026-11-23). ~~Launcher Online screen, closing after sending, catching up on start (also from the relay on a new device), desktop "your turn" check~~ (done 2026-11-24). ~~Scenario check~~ (done 2026-11-24). ~~Real relay test~~ (done 2026-11-24, session 4). ~~Android: Online screen and notifications~~ (built 2026-11-24, session 5, PR #9). ~~Device test~~ (passed 2026-11-24, owner).
+7. ~~Optional: visual replay of the enemy's turn~~ (done 2026-11-24, session 6, branch `enemy-replay`; battles are fought again from the same seed).
 8. Later: Options A and B (the card and save layout they need is now mapped).
+
+## Session status (chat B, 2026-11-24, session 6)
+**Done**
+- **Replay of the opponent's turn** (step 7 above), branch `enemy-replay` from main: their units walk on the map with a short pause after each step, and their battles are fought again on screen from the same seed, giving exactly the recorded result; the turn file's end state is then loaded as before. Turn files are version 3 (start tables + battle seeds); version 2 still read.
+- Tests: simulator (replay cases added), new `tools/research/replay_demo.py` (two real copies: battle replayed while waiting and at map start, both exact), `online_demo.py` still passes.
+- Sandbox notes: libwebp and SDL3 are not vendored and codeload.github.com is blocked; `git fetch` the libwebp pin from github.com and pass `PSX_LIBWEBP_SOURCE_DIR`; `apt-get install libgl-dev libegl-dev libgles-dev libxcursor-dev libxi-dev libxrandr-dev libxss-dev libxfixes-dev libxtst-dev` for SDL3.
+
+**Next**
+- Hub: land branch `enemy-replay` (pushing was refused from this session; the commit is in the handover zip as a git bundle). Release note: both players must update (version-3 turn files).
+- Owner: device test on Android (the APK could not be built here: no access to the devkit release).
+- Map Negotiation and research (owner's request through chat A, project doc "Note for Chat B - Negotiation"): not started; `0x8004BBB8` is the End Turn routine (calls `0x8004B9F4`, loops over 6 records at `0x80128040` and the table at `0x800BD0AC`).
+- Small: skip button for the replay; monochrome notification icon.
+- Later: Options A (live VS) and B (card sharing).
+
+**Blocked**
+- Pushing to GitHub from this session (access refused); the hub lands the bundle.
 
 ## Session status (chat B, 2026-11-24, session 5)
 **Done**
 - Hub merged PR #2 and the Android port into main (v0.1.3). New branch `online-android` on top of it, **PR #9**: the online campaign in the Android app (step 6e above): Online screen, relay requests through Java (no curl on Android), `CH_TURN_*` switches from the app, "it's your turn" notifications every ~15 minutes, `INTERNET` permission (was missing).
 - `Relay.java` tested on a PC against the local and the real relay (`tools/research/android_relay_test/run.sh`, all pass); turn simulator still passes; APK built.
 
-**Next**
-- Owner: install the test APK on the Legion Tab and try ONLINE CAMPAIGN: NEW GAME, then join it from the PC launcher (or the other way round), play a turn each, and wait for the notification. Then SAVE LOG TO DOWNLOADS and attach the log.
-- Test APK rebuilt with the owner's key (`carnageheart.keystore`, SHA-256 19:6D:C3:EC...C9:98): installs over the old test app.
-- Hub: merge PR #9 after the device test.
-- Later: visual replay of the enemy's turn (step 7); Options A and B.
+- Test APK rebuilt with the owner's key (`carnageheart.keystore`, SHA-256 19:6D:C3:EC...C9:98); installs over the old test app.
+- **Owner tested on the tablet: multiplayer worked.** Hub merged PR #9 into main.
+
+**Next** (session 6 branches from main)
+- Optional: visual replay of the enemy's turn (step 7).
+- Later: Options A (live VS) and B (card sharing; Share Data can reuse the relay).
+- Small: a monochrome notification icon.
 
 **Blocked**
-- Device test needs the owner.
+- Nothing.
 
 ## Session status (chat B, 2026-11-24, session 4)
 **Done**

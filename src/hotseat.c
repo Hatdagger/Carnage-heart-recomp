@@ -285,6 +285,42 @@ static void swap_sides(CPUState *cpu)
             g_side ? 'B' : 'A', cpu->read_word(GP_TURN), f2, f1);
 }
 
+/* Turn RAM round to the other side's point of view and back (calling it
+ * twice changes nothing): units i <-> i+32, owner bytes 1 <-> 2 in units,
+ * bases and OKEs, the funds, and the player card table <-> the other side's
+ * designs. For the replay of an opponent's battle (remote_battle.c), which
+ * is fought again exactly as it started on their device. */
+void ch_hotseat_swap_view(CPUState *cpu)
+{
+    const uint32_t cards = cpu->read_word(PTR_PLAYER_CARD);
+    const uint32_t okes  = cpu->read_word(PTR_OKE_TABLE);
+    const uint32_t bases = cpu->read_word(PTR_BASE_TABLE);
+    const uint32_t units = cpu->read_word(PTR_UNIT_TABLE);
+    uint8_t a[UNIT_SIZE], b[UNIT_SIZE];
+    for (int i = 0; i < 32; i++) {
+        const uint32_t ua = units + i * UNIT_SIZE, ub = units + (i + 32) * UNIT_SIZE;
+        rd(cpu, ua, a, UNIT_SIZE);
+        rd(cpu, ub, b, UNIT_SIZE);
+        a[0] = swap_owner(a[0]);
+        b[0] = swap_owner(b[0]);
+        wr(cpu, ua, b, UNIT_SIZE);
+        wr(cpu, ub, a, UNIT_SIZE);
+    }
+    for (int k = 0; k < BASE_COUNT; k++)
+        cpu->write_byte(bases + k * BASE_SIZE, swap_owner(cpu->read_byte(bases + k * BASE_SIZE)));
+    for (int k = 0; k < OKE_COUNT; k++)
+        cpu->write_byte(okes + k * OKE_SIZE, swap_owner(cpu->read_byte(okes + k * OKE_SIZE)));
+    const uint32_t f1 = cpu->read_word(GP_FUNDS_PLAYER), f2 = cpu->read_word(GP_FUNDS_CPU);
+    cpu->write_word(GP_FUNDS_PLAYER, f2);
+    cpu->write_word(GP_FUNDS_CPU, f1);
+    static uint8_t tmp[CARD_SIZE];
+    for (int c = 0; c < CARD_SLOTS; c++) {
+        rd(cpu, cards + c * CARD_SIZE, tmp, CARD_SIZE);
+        wr(cpu, cards + c * CARD_SIZE, g_other_cards[c], CARD_SIZE);
+        memcpy(g_other_cards[c], tmp, CARD_SIZE);
+    }
+}
+
 /* End Turn: set up on the first one. */
 void func_8001B8EC(CPUState *cpu)
 {
@@ -376,6 +412,8 @@ void func_8008A2B8(CPUState *cpu)
     if (g_tf_waiting) {
         /* Back from one frame of VSync while waiting for the opponent. */
         const int r = ch_turns_poll(cpu);
+        if (r == -2)
+            return;                  /* the replay called a game routine */
         if (r < 0) {
             tf_wait_a_frame(cpu);
             return;
@@ -396,15 +434,20 @@ void func_8008A2B8(CPUState *cpu)
             /* Two copies: send my half, load the opponent's (turn_files.c). */
             if (g_snapped)
                 restore_waiting_side(cpu);
+            /* Kept before anything else runs: the replay calls the game's
+             * routines straight away. */
+            memcpy(g_tf_gpr, cpu->gpr, sizeof g_tf_gpr);
+            g_tf_hi = cpu->hi;
+            g_tf_lo = cpu->lo;
             const int r = ch_turns_swap_point(cpu, !(mine && theirs));
             if (r < 0) {
-                memcpy(g_tf_gpr, cpu->gpr, sizeof g_tf_gpr);
-                g_tf_hi = cpu->hi;
-                g_tf_lo = cpu->lo;
                 g_tf_waiting = 1;
-                tf_wait_a_frame(cpu);
+                if (r == -1)
+                    tf_wait_a_frame(cpu);
                 return;
             }
+            if (g_tf_gpr[31] != cpu->gpr[31] || g_tf_gpr[4] != cpu->gpr[4])
+                tf_resume(cpu, 0);   /* not expected; registers as they were */
             if (r) {
                 fprintf(stderr, "[hotseat] game over\n");
                 g_ready = 0;

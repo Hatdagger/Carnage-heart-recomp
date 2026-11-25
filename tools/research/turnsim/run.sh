@@ -12,7 +12,7 @@ set -e
 here=$(cd "$(dirname "$0")" && pwd); src="$here/../../../src"
 bin="${TMPDIR:-/tmp}/ch-turnsim"
 cc -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -O1 -I"$here/mock" -o "$bin" \
-   -pthread "$here/sim.c" "$src/turn_files.c" "$src/turn_relay.c" "$src/hotseat.c" "$src/remote_battle.c"
+   -pthread "$here/sim.c" "$src/turn_files.c" "$src/turn_relay.c" "$src/hotseat.c" "$src/remote_battle.c" "$src/turn_replay.c"
 turns=${1:-8}
 play() {  # play <dir> <player> <turns> <log>
     CH_TURN_DIR="$1" CH_TURN_ROLE=$2 exec "$bin" $2 $3 > "$4" 2> "$4.err"

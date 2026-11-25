@@ -51,7 +51,18 @@ static CPUState C = { .read_word = rw, .write_word = ww, .read_half = rh,
 /* The hooks under test. */
 void func_8001B8EC(CPUState *); void func_8001C268(CPUState *); void func_8001BCB0(CPUState *);
 void func_8008A2B8(CPUState *); void func_8001CF48(CPUState *); void func_80035CD4(CPUState *);
-void func_80035988(CPUState *); void func_800333F8(CPUState *);
+void func_80035988(CPUState *); void func_800333F8(CPUState *); void func_8008E1E4(CPUState *);
+
+/* The game routines the hooks may "call" (cpu->pc set, return address in
+ * $ra): VSync while waiting; the unit steps while replaying the opponent's
+ * turn (turn_files.c). */
+#define FN_VSYNC     0x800AC734u
+#define FN_UNIT_PATH 0x80034C38u
+#define FN_UNIT_SHOW 0x8001BCB0u
+#define FN_UNIT_MOVE 0x8001C000u
+#define FN_TURN_PREP 0x800341FCu
+static void move_one(int i, int player_side);
+static long g_replay_moves;
 
 #define U(i) (UNITS + (i) * 22u)
 #define O(k) (OKES + (k) * 12u)
@@ -68,26 +79,64 @@ static void battle(uint32_t u1, uint32_t u2)
     C.pc = 0; C.gpr[4] = u2; func_80035988(&C);
 }
 
+/* One unit's step (0x8001C000): one hex towards its target; a battle if an
+ * enemy unit is there (the player-side unit is always side 1), then base
+ * capture. */
+static void move_one(int i, int player_side)
+{
+    if (rb(U(i)) == 0 || rb(U(i) + 1) == 0) return;
+    if (rb(U(i)) != (player_side ? 1 : 2)) g_wrong_mover++;
+    int16_t x = (int16_t)rh(U(i) + 2), t = (int16_t)rh(U(i) + 6);
+    if (x == t) return;
+    x += x < t ? 1 : -1;
+    wh(U(i) + 2, (uint16_t)x);
+    for (int j = 0; j < 64; j++)
+        if (j != i && rb(U(j)) && rb(U(j)) != rb(U(i)) && (int16_t)rh(U(j) + 2) == x) {
+            if (player_side) battle(i, j); else battle(j, i);
+            break;
+        }
+    /* base capture */
+    for (int b = 0; b < 2; b++)
+        if (rb(U(i)) && (int16_t)rh(B(b) + 2) == x && rb(B(b)) != rb(U(i))) {
+            wb(B(b), rb(U(i)));
+            for (int k = 0; k < 200; k++) if (rb(O(k)) && rb(O(k) + 1) == 0 && rb(O(k) + 2) == b) wb(O(k), 0);
+        }
+}
+
 static void move_units(int lo, int hi)
 {
-    for (int i = lo; i < hi; i++) {
-        if (rb(U(i)) == 0 || rb(U(i) + 1) == 0) continue;
-        if (rb(U(i)) != (lo == 0 ? 1 : 2)) g_wrong_mover++;
-        int16_t x = (int16_t)rh(U(i) + 2), t = (int16_t)rh(U(i) + 6);
-        if (x == t) continue;
-        x += x < t ? 1 : -1;
-        wh(U(i) + 2, (uint16_t)x);
-        for (int j = 0; j < 64; j++)
-            if (j != i && rb(U(j)) && rb(U(j)) != rb(U(i)) && (int16_t)rh(U(j) + 2) == x) {
-                if (lo == 0) battle(i, j); else battle(j, i);
-                break;
+    for (int i = lo; i < hi; i++)
+        move_one(i, lo == 0);
+}
+
+/* Run a hook, then every game routine it "calls", returning to it each
+ * time, until it hands control back (pc is no longer one of them). */
+static void run_hook(void (*hook)(CPUState *), uint32_t addr, int waiting_quit)
+{
+    CPUState *c = &C;
+    hook(c);
+    for (int frames = 0;; frames++) {
+        const uint32_t pc = c->pc;
+        if (pc != FN_VSYNC && pc != FN_UNIT_PATH && pc != FN_UNIT_SHOW && pc != FN_UNIT_MOVE &&
+            pc != FN_TURN_PREP)
+            break;
+        if (c->gpr[31] != addr) { fprintf(stderr, "SIM: hook call lost its way back\n"); exit(2); }
+        c->gpr[16] = 0xDEAD;            /* a routine may use any register */
+        if (pc == FN_VSYNC) {
+            struct timespec ts = { 0, 1000000L }; nanosleep(&ts, NULL);
+            g_frames_waited = frames + 1;
+            if (waiting_quit && g_last_turn && frames > 3 && getenv("SIM_QUIT_WAITING")) {
+                printf("QUIT while waiting: %s\n", g_status);
+                fflush(stdout);
+                exit(0);
             }
-        /* base capture */
-        for (int b = 0; b < 2; b++)
-            if (rb(U(i)) && (int16_t)rh(B(b) + 2) == x && rb(B(b)) != rb(U(i))) {
-                wb(B(b), rb(U(i)));
-                for (int k = 0; k < 200; k++) if (rb(O(k)) && rb(O(k) + 1) == 0 && rb(O(k) + 2) == b) wb(O(k), 0);
-            }
+        } else if (pc == FN_UNIT_MOVE) {
+            if (c->gpr[4] < 32) { fprintf(stderr, "SIM: replay moved my unit %u\n", c->gpr[4]); exit(2); }
+            move_one((int)c->gpr[4], 0);
+            g_replay_moves++;
+        }
+        c->pc = addr;                   /* the routine returns to the hook's entry */
+        hook(c);
     }
 }
 
@@ -119,20 +168,7 @@ void ch_remote_lle_func_8001B8EC(CPUState *c)
      * one frame, then back into the hook, until it returns to End Turn with
      * the registers End Turn called it with. */
     c->pc = 0; c->gpr[16] = 0x5150; c->gpr[31] = 0x8001BAAA;
-    func_8008A2B8(c);
-    for (int frames = 0; c->pc == 0x800AC734u; frames++) {
-        if (c->gpr[31] != 0x8008A2B8u) { fprintf(stderr, "SIM: wait loop lost its way back\n"); exit(2); }
-        c->gpr[16] = 0xDEAD;            /* VSync may use any register */
-        struct timespec ts = { 0, 1000000L }; nanosleep(&ts, NULL);
-        c->pc = 0x8008A2B8u;            /* VSync returns to the hook's entry */
-        func_8008A2B8(c);
-        g_frames_waited = frames + 1;
-        if (g_last_turn && frames > 3 && getenv("SIM_QUIT_WAITING")) {
-            printf("QUIT while waiting: %s\n", g_status);
-            fflush(stdout);
-            exit(0);
-        }
-    }
+    run_hook(func_8008A2B8, 0x8008A2B8u, 1);
     if (c->gpr[16] != 0x5150 || c->gpr[31] != 0x8001BAAA) {
         fprintf(stderr, "SIM: registers not put back after waiting\n"); exit(2);
     }
@@ -148,16 +184,31 @@ void ch_remote_lle_func_8001C268(CPUState *c) { g_cpu_ai_ran++; c->pc = c->gpr[3
 void ch_remote_lle_func_8001BCB0(CPUState *c) { (void)c; }
 void ch_remote_lle_func_8008A2B8(CPUState *c) { (void)c; }
 void ch_remote_lle_func_8001CF48(CPUState *c) { (void)c; }
+static int sim_rand(void)
+{
+    CPUState save = C;
+    C.pc = 0; C.gpr[31] = 0x4242;
+    func_8008E1E4(&C);
+    const int r = (int)C.gpr[2];
+    if (C.pc != 0x4242) { fprintf(stderr, "SIM: rand did not return\n"); exit(2); }
+    uint32_t keep[32]; memcpy(keep, save.gpr, sizeof keep);
+    C = save; memcpy(C.gpr, keep, sizeof keep);
+    return r;
+}
 void ch_remote_lle_func_80035CD4(CPUState *c)
-{   /* the battle: side 1 (mover) loses 50 HP per OKE, side 2 loses 200 */
+{   /* the battle: side 1 loses 30-69 HP per OKE, side 2 160-239 (from rand,
+     * so a replay only matches if it starts from the same seed) */
+    const uint32_t u1 = c->gpr[4], u2 = c->gpr[5];
     for (int side = 0; side < 2; side++) {
-        uint32_t u = U(c->gpr[4 + side]);
+        uint32_t u = U(side ? u2 : u1);
         for (int s = 0; s < 3; s++) {
             int16_t k = (int16_t)rh(u + 12 + 2 * s);
-            if (k >= 0) wh(O(k) + 6, (uint16_t)((int16_t)rh(O(k) + 6) - (side ? 200 : 50)));
+            int dmg = side ? 160 + sim_rand() % 80 : 30 + sim_rand() % 40;
+            if (k >= 0) wh(O(k) + 6, (uint16_t)((int16_t)rh(O(k) + 6) - dmg));
         }
     }
 }
+void ch_remote_lle_func_8008E1E4(CPUState *c) { c->gpr[2] = 7; c->pc = c->gpr[31]; }
 void ch_remote_lle_func_80035988(CPUState *c)
 {
     uint32_t u = U(c->gpr[4]); int left = 0;
@@ -226,8 +277,11 @@ int main(int argc, char **argv)
     init(role);
     setvbuf(stdout, NULL, _IONBF, 0);
     /* The map opens: catch up with the newest turn file. */
-    C.pc = 0;
-    func_800333F8(&C);
+    C.pc = 0; C.gpr[16] = 0x5150; C.gpr[31] = 0x80031AAA;
+    run_hook(func_800333F8, 0x800333F8u, 0);
+    if (C.gpr[16] != 0x5150 || C.gpr[31] != 0x80031AAA) {
+        fprintf(stderr, "SIM: registers not put back after the map start\n"); exit(2);
+    }
     if (strncmp(g_status, "Caught up", 9) == 0) {
         /* Same lines as a receive-only End Turn would print. */
         print_side("PRE", 1);
@@ -247,6 +301,7 @@ int main(int argc, char **argv)
         print_side("POST", 0);
         if (rw(GP_FUNDS_PLAYER) == 0) break;
     }
-    printf("END %c cpu_ai_ran=%d wrong_mover=%d frames_waited_last=%ld\n", "AB"[role], g_cpu_ai_ran, g_wrong_mover, g_frames_waited);
+    printf("END %c cpu_ai_ran=%d wrong_mover=%d frames_waited_last=%ld replay_moves=%ld\n", "AB"[role],
+           g_cpu_ai_ran, g_wrong_mover, g_frames_waited, g_replay_moves);
     return (g_cpu_ai_ran || g_wrong_mover) ? 3 : 0;
 }

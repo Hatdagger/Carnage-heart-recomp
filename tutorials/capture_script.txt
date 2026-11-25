@@ -68,6 +68,62 @@ press circle
 screen 80037D30
 wait 30
 
+# ---- Negotiation: companies, Blue Prints, Optimization, Information, R & D
+click 134 101
+wait 120
+shot negotiation-intro
+press cross
+screen 8004CC5C
+wait 40
+shot negotiation
+click 120 65
+wait 90
+shot negotiation-office
+click 120 65
+wait 90
+shot blueprints
+click 300 105
+wait 90
+shot blueprint-detail
+press circle
+wait 60
+press circle
+wait 60
+click 120 101
+wait 90
+shot optimize
+click 300 69
+wait 90
+shot optimize-detail
+press circle
+wait 60
+press circle
+wait 60
+press circle
+wait 60
+click 120 137
+wait 90
+click 120 83
+wait 90
+shot rnd
+click 300 69
+wait 90
+shot rnd-detail
+press circle
+wait 60
+press circle
+wait 60
+click 120 119
+wait 90
+shot information
+press cross
+wait 90
+press circle
+wait 60
+press circle
+screen 80037D30 600
+wait 30
+
 # ---- Design: cards, hardware (Auto), software (Auto)
 click 134 83
 screen 80038514

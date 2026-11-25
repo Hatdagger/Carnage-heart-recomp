@@ -81,7 +81,7 @@ If setup fails, open `setup-log.txt` in the same folder as the exe. It records e
 
 ### Tutorials
 
-Once the game is installed, the launcher shows **INSTALL TUTORIALS**. It makes the lessons' pictures on your PC from your own disc and game: portraits and part pictures are read from the disc image, and the game runs hidden for about three minutes (a new Practice game, nothing saved) while it takes screenshots of the menus. A window shows the progress. Afterwards the row reads **TUTORIALS** and opens the lessons in your web browser (they work offline); **MAKE THE PICTURES AGAIN** retakes them, e.g. after an update. The pictures stay in `tutorials/local/` and are never uploaded or shipped. If the hidden window gives no pictures on your PC, a normal game window opens instead: don't click in it until it closes. Details: `tutorials/local/make-pictures-log.txt`.
+Once the game is installed, the launcher shows **INSTALL TUTORIALS**. It makes the lessons' pictures on your PC from your own disc and game: portraits and part pictures are read from the disc image, and the game runs hidden for about four minutes (a new Practice game, nothing saved) while it takes screenshots of the menus. A window shows the progress. Afterwards the row reads **TUTORIALS** and opens the lessons in your web browser (they work offline); **MAKE THE PICTURES AGAIN** retakes them, e.g. after an update. The pictures stay in `tutorials/local/` and are never uploaded or shipped. If the hidden window gives no pictures on your PC, a normal game window opens instead: don't click in it until it closes. Details: `tutorials/local/make-pictures-log.txt`.
 
 ### Android app
 

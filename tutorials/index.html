@@ -498,6 +498,99 @@ const PIC = {
     s+=txt(460,249,"+20% per turn",{fill:C.on,size:13});
     return svg(640,380,s);
   },
+  negCompanies(){
+    let s=rect(0,0,640,380,{fill:"#0a1220"});
+    s+=topStrip(30,14,580,["Negotiation","Turn 1","Funds 500000"]);
+    s+=menuBox(40,64,"",["Kawashima Corp","Brenan","Mcmorell","AAC","Union Claude","Canyon Logic"],0,240);
+    s+=`<circle cx="460" cy="190" r="120" fill="#13305a" stroke="#4a6fa8" stroke-width="2"/><path d="M380 140 Q420 110 470 130 T540 170 Q520 220 470 210 T390 200 Z" fill="#3c6a3a" opacity=".8"/>`;
+    s+=`<line x1="280" y1="88" x2="430" y2="160" stroke="${C.red}" stroke-width="2"/><circle cx="430" cy="160" r="5" fill="${C.red}"/>`;
+    s+=txt(320,350,"Six companies. Drakken, your enemy, buys from them too.",{anchor:"middle",size:13});
+    return svg(640,380,s);
+  },
+  negOffice(){
+    let s=rect(0,0,640,380,{fill:"#0a1220"});
+    s+=topStrip(30,14,580,["Negotiation","Turn 1","Funds 500000"]);
+    s+=menuBox(40,64,"",["Blue Prints","R & D","Optimization","Information"],0,240);
+    const rows=[["BLUE PRINTS","buy a finished design"],["R & D","pay towards a new one"],["OPTIMIZATION","improve a body you own"],["INFORMATION","ask for news (free)"]];
+    rows.forEach(([a,b],i)=>{ s+=txt(320,94+i*26,a,{fill:C.hi,size:13})+txt(460,94+i*26,b,{size:12}); });
+    s+=rect(40,260,560,60,{fill:C.menu,stroke:C.menuEdge,sw:2,rx:3})+txt(60,296,"Welcome to our office.",{fill:C.menuText,size:15});
+    return svg(640,380,s);
+  },
+  negBlueprint(){
+    let s=rect(0,0,640,380,{fill:"#0a1220"});
+    s+=topStrip(30,14,580,["Blue Prints","Turn 1","Funds 500000"]);
+    s+=`<rect x="90" y="110" width="20" height="90" rx="6" fill="#9aa3ad" transform="rotate(35 100 155)"/>`;
+    s+=rect(300,56,300,200,{fill:C.menu,stroke:C.menuEdge,sw:2,rx:3})+txt(316,80,"CPU part",{fill:C.menuText,size:15});
+    [["Speed","Low"],["Capacity","121"],["Weight","4 kg"],["Process","10"],["Cost","50"]].forEach(([a,b],i)=>{ s+=txt(316,108+i*22,a,{fill:C.menuText,size:13})+txt(430,108+i*22,b,{fill:C.menuText,size:13}); });
+    s+=txt(316,236,"Price",{fill:C.hi,size:14})+txt(430,236,"4000",{fill:C.hi,size:14});
+    s+=rect(200,205,70,28,{stroke:C.menuEdge,sw:2})+txt(235,225,"OK",{anchor:"middle",fill:C.menuText,size:14});
+    s+=txt(320,300,"Buy it once: then it can be used in Design",{anchor:"middle",size:13})+txt(320,322,"and built in your factories.",{anchor:"middle",size:13});
+    return svg(640,380,s);
+  },
+  negPrice(){
+    let s=rect(0,0,640,380,{fill:C.bg});
+    s+=txt(40,44,"Why prices change",{fill:C.bright,size:17});
+    const xs=[80,195,310,425,540], lab=["losing","behind","even","ahead","winning"];
+    const norm=[95,100,100,105,115], good=[85,90,95,100,100];
+    lab.forEach((l,i)=>{ s+=txt(xs[i],80,l,{anchor:"middle",size:12,fill:C.dim});
+      s+=rect(xs[i]-40,240-norm[i]*1.2,30,norm[i]*1.2,{fill:"#3a5f8a"})+txt(xs[i]-25,232-norm[i]*1.2,norm[i]+"%",{anchor:"middle",size:11});
+      s+=rect(xs[i]+5,240-good[i]*1.2,30,good[i]*1.2,{fill:"#2f6a3f"})+txt(xs[i]+20,232-good[i]*1.2,good[i]+"%",{anchor:"middle",size:11}); });
+    s+=`<line x1="30" y1="240" x2="610" y2="240" stroke="${C.line}"/>`;
+    s+=rect(40,262,14,14,{fill:"#3a5f8a"})+txt(62,274,"normal price",{size:12})+rect(200,262,14,14,{fill:"#2f6a3f"})+txt(222,274,"regular customer",{size:12});
+    s+=txt(40,310,"The better you are doing in the war, the more the companies charge.",{size:13});
+    s+=txt(40,334,"Buy often from one company to become a regular customer.",{size:13,fill:C.on});
+    s+=txt(40,358,"Paid towards its R & D? Another 10% or 20% off that blueprint.",{size:13,fill:C.hi});
+    return svg(640,380,s);
+  },
+  negRnd(){
+    let s=rect(0,0,640,380,{fill:C.bg});
+    s+=txt(40,44,"R & D: pay towards a design still being made",{fill:C.bright,size:16});
+    s+=rect(40,70,560,36,{stroke:C.line,rx:4});
+    s+=rect(42,72,380,32,{fill:"#3a5f8a"})+rect(422,72,176,32,{fill:"#2f6a3f"});
+    s+=txt(232,93,"turns still to go",{anchor:"middle",size:12,fill:"#fff"})+txt(510,93,"saved by paying",{anchor:"middle",size:12,fill:"#fff"});
+    s+=txt(40,150,"Pay more and it arrives sooner (never less than 8 turns)",{size:13});
+    s+=txt(40,174,"and is less likely to be delayed.",{size:13});
+    s+=txt(40,218,"When it goes on sale you get a discount on it:",{size:13,fill:C.on});
+    s+=txt(60,242,"paid 80% of its price or more  ->  10% off",{size:13,fill:C.on});
+    s+=txt(60,266,"paid 160% or more              ->  20% off",{size:13,fill:C.on});
+    s+=txt(40,310,"Pay a lot and Drakken can't buy it for a few turns.",{size:13,fill:C.hi});
+    s+=txt(40,334,"Don't pay at all and Drakken may snap it up the moment it is done.",{size:13,fill:C.warn});
+    return svg(640,380,s);
+  },
+  negOptimize(){
+    let s=rect(0,0,640,380,{fill:"#0a1220"});
+    s+=topStrip(30,14,580,["Optimization","Turn 1","Funds 500000"]);
+    s+=robot(150,170,1.1,"legs2");
+    s+=rect(300,56,300,200,{fill:C.menu,stroke:C.menuEdge,sw:2,rx:3})+txt(316,80,"Prowler I",{fill:C.menuText,size:15});
+    [["Weight","Down"],["Durability","Up"],["Process","Down"],["Cost","Up"],["Level","Up"]].forEach(([a,b],i)=>{ s+=txt(316,108+i*22,a,{fill:C.menuText,size:13})+txt(450,108+i*22,b,{fill:b==="Up"?C.on:C.hi,size:13}); });
+    s+=txt(316,236,"Price",{fill:C.hi,size:14})+txt(450,236,"16000",{fill:C.hi,size:14});
+    s+=txt(320,300,"Pay once, wait the turns (12 for Prowler I),",{anchor:"middle",size:13})+txt(320,322,"then the improved body is yours as a new blueprint.",{anchor:"middle",size:13,fill:C.on});
+    return svg(640,380,s);
+  },
+  negInfo(){
+    let s=rect(0,0,640,380,{fill:C.bg});
+    s+=rect(40,60,560,90,{fill:C.menu,stroke:C.menuEdge,sw:2,rx:4});
+    s+=txt(60,96,"\"We hear a rival is close to finishing",{fill:C.menuText,size:15})+txt(60,122,"a new engine...\"",{fill:C.menuText,size:15});
+    s+=txt(40,200,"Information is free. The company tells you what it hears:",{size:13});
+    s+=txt(60,226,"- what another company is developing or has finished",{size:13});
+    s+=txt(60,250,"- what it has sold to Drakken",{size:13});
+    s+=txt(40,296,"Each visit costs a little goodwill at the end of the turn,",{size:13,fill:C.hi});
+    s+=txt(40,320,"so don't ask the same company every turn.",{size:13,fill:C.hi});
+    return svg(640,380,s);
+  },
+  negEndTurn(){
+    let s=rect(0,0,640,380,{fill:C.bg});
+    s+=txt(40,44,"Every End Turn",{fill:C.bright,size:17});
+    const rows=["Designs being developed move on a turn; finished ones go on sale.",
+      "Your optimizations count down.",
+      "Every other turn, goodwill fades a little if you stop buying.",
+      "Drakken buys, pays for R & D and orders optimizations too."];
+    rows.forEach((r,i)=>{ s+=rect(40,70+i*52,560,42,{fill:"#0d1d15",stroke:C.line,rx:5})+txt(56,97+i*52,r,{size:13}); });
+    s+=txt(40,300,"Online:",{fill:C.hi,size:14})+txt(110,300,"your opponent takes Drakken's place.",{size:13});
+    s+=txt(40,324,"What you buy is yours; they can buy the same blueprints.",{size:13});
+    s+=txt(40,348,"The companies' developments are the same in both games.",{size:13});
+    return svg(640,380,s);
+  },
 };
 
 /* ======================================================================
@@ -513,12 +606,12 @@ const LESSONS = [
             {x:65.62,y:14.74,w:31.25,h:17.89,label:"Design",note:"DESIGN: choose an OKE's parts (hardware) and write its chip program (software). One design is saved on a CARD."},
             {x:65.62,y:67.37,w:31.25,h:17.89,label:"End turn",note:"END TURN: units move along their orders, factories work, bases refuel and repair. The enemy plays too."},
             {x:3.12,y:67.37,w:31.25,h:17.89,label:"Battle",note:"BATTLE: when two enemy units meet on the map they fight. Up to three OKEs per side, all driven by their programs."}]},
-    {pic:"commandMenu", shot:"command", shotSpots:[{x:14.06,y:23.33,w:24.41,h:7.50,label:"Tactics",note:"Opens your bases: deploy units, form units, run the factory, command units in the field, see every base."},{x:14.06,y:30.83,w:24.41,h:7.50,label:"Design",note:"Pick a card, then build its hardware, write its software and test it."},{x:14.06,y:38.33,w:24.41,h:7.50,label:"Negotiation",note:"A lesson about Negotiation comes later."},{x:14.06,y:45.83,w:24.41,h:7.50,label:"System",note:"Saving and loading your campaign, and options."},{x:14.06,y:53.33,w:24.41,h:7.50,label:"End Turn",note:"When you are happy with your plans, end the turn. Everything else happens by itself."},{x:4.00,y:2.00,w:92.00,h:8.00,label:"Top bar",note:"The top bar always shows where you are, the turn number and your funds. Funds pay for new OKEs, ammo and factory work."}], title:"The Command menu",
+    {pic:"commandMenu", shot:"command", shotSpots:[{x:14.06,y:23.33,w:24.41,h:7.50,label:"Tactics",note:"Opens your bases: deploy units, form units, run the factory, command units in the field, see every base."},{x:14.06,y:30.83,w:24.41,h:7.50,label:"Design",note:"Pick a card, then build its hardware, write its software and test it."},{x:14.06,y:38.33,w:24.41,h:7.50,label:"Negotiation",note:"Buy blueprints (designs for parts) from six arms companies, pay towards new designs, improve bodies you own, and ask for news. See the lesson Negotiation."},{x:14.06,y:45.83,w:24.41,h:7.50,label:"System",note:"Saving and loading your campaign, and options."},{x:14.06,y:53.33,w:24.41,h:7.50,label:"End Turn",note:"When you are happy with your plans, end the turn. Everything else happens by itself."},{x:4.00,y:2.00,w:92.00,h:8.00,label:"Top bar",note:"The top bar always shows where you are, the turn number and your funds. Funds pay for new OKEs, ammo and factory work."}], title:"The Command menu",
      text:["Every turn starts here. Five choices:",
            "TACTICS (your bases and units), DESIGN (OKE cards), NEGOTIATION, SYSTEM (save, load, options) and END TURN."],
      spots:[{x:10.31,y:23.16,w:32.50,h:6.84,label:"Tactics",note:"Opens your bases: deploy units, form units, run the factory, command units in the field, see every base."},
             {x:10.31,y:30.00,w:32.50,h:6.84,label:"Design",note:"Pick a card, then build its hardware, write its software and test it."},
-            {x:10.31,y:36.84,w:32.50,h:6.84,label:"Negotiation",note:"A lesson about Negotiation comes later."},
+            {x:10.31,y:36.84,w:32.50,h:6.84,label:"Negotiation",note:"Buy blueprints (designs for parts) from six arms companies, pay towards new designs, improve bodies you own, and ask for news. See the lesson Negotiation."},
             {x:10.31,y:43.68,w:32.50,h:6.84,label:"System",note:"Saving and loading your campaign, and options."},
             {x:10.31,y:50.53,w:32.50,h:6.84,label:"End Turn",note:"When you are happy with your plans, end the turn. Everything else happens by itself."},
             {x:4.69,y:4.74,w:90.62,h:7.89,label:"Top bar",note:"The top bar always shows where you are, the turn number and your funds. Funds pay for new OKEs, ammo and factory work."}]},
@@ -633,7 +726,38 @@ const LESSONS = [
            "Keep a unit on Defend Base at the bases that matter."]},
   ],
   deep:"units" },
-{ id:"negotiation", title:"Negotiation", blurb:"Coming later.", soon:true, slides:[], deep:null },
+{ id:"negotiation", face:"07", title:"Negotiation", blurb:"Buy blueprints from the arms companies, fund new designs, improve bodies, ask for news.",
+  slides:[
+    {pic:"negCompanies", shot:"negotiation", shotSpots:[{x:6.45,y:23.33,w:34.38,h:7.50,label:"Kawashima Corp",note:"Each company makes its own range of parts. Click a company to visit its office."},{x:6.45,y:30.83,w:34.38,h:7.50,label:"Brenan",note:"Each company makes its own range of parts. Click a company to visit its office."},{x:6.45,y:38.33,w:34.38,h:7.50,label:"Mcmorell",note:"Each company makes its own range of parts. Click a company to visit its office."},{x:6.45,y:45.83,w:34.38,h:7.50,label:"AAC",note:"Each company makes its own range of parts. Click a company to visit its office."},{x:6.45,y:53.33,w:34.38,h:7.50,label:"Union Claude",note:"Each company makes its own range of parts. Click a company to visit its office."},{x:6.45,y:60.83,w:34.38,h:7.50,label:"Canyon Logic",note:"Each company makes its own range of parts. Click a company to visit its office."},{x:4.00,y:2.00,w:92.00,h:8.00,label:"Top bar",note:"Your funds. Everything here is paid at once, from these funds."}], title:"Six arms companies",
+     text:["COMMAND > NEGOTIATION. Your OKEs are built from parts, and six companies make them: Kawashima Corp, Brenan, Mcmorell, AAC, Union Claude and Canyon Logic.",
+           "You start with a basic set of blueprints (designs). Better OKEs need more of them. Drakken, the enemy, shops at the same companies."]},
+    {pic:"negOffice", shot:"negotiation-office", shotSpots:[{x:6.45,y:23.33,w:34.38,h:7.50,label:"Blue Prints",note:"Buy a finished design. Once bought you can use it in Design and build it in the factory."},{x:6.45,y:30.83,w:34.38,h:7.50,label:"R & D",note:"Pay towards a design the company is still developing: it arrives sooner, and you get it cheaper."},{x:6.45,y:38.33,w:34.38,h:7.50,label:"Optimization",note:"Pay to improve an OKE body you already own. Only some bodies can be improved."},{x:6.45,y:45.83,w:34.38,h:7.50,label:"Information",note:"Ask for news. Free, but it costs a little goodwill at the end of the turn."},{x:3.00,y:60.00,w:25.00,h:32.00,label:"The company",note:"Each company has its own representative. What they say at the bottom explains the screen."}], title:"In a company's office",
+     text:["Pick a company, then one of four choices.",
+           "Blue Prints and R & D are what you will use most. Everything is paid at once from your funds."],
+     spots:[{x:7.50,y:19.47,w:35.00,h:6.05,label:"Blue Prints",note:"Buy a finished design."},
+            {x:7.50,y:26.32,w:35.00,h:6.05,label:"R & D",note:"Pay towards a design still being developed."},
+            {x:7.50,y:33.16,w:35.00,h:6.05,label:"Optimization",note:"Improve a body you own."},
+            {x:7.50,y:40.00,w:35.00,h:6.05,label:"Information",note:"Ask for news (free)."}]},
+    {pic:"negBlueprint", shot:"blueprint-detail", shotSpots:[{x:48.40,y:14.60,w:45.40,h:46.00,label:"Figures",note:"The part's figures. Weight and Process (work to build) matter for every design."},{x:48.40,y:62.50,w:45.40,h:7.50,label:"Price",note:"What it costs now. Prices change with how the war is going and how good a customer you are."},{x:31.50,y:59.50,w:15.00,h:10.00,label:"OK",note:"Pick OK to buy it. Already own it? The company says so instead."},{x:14.00,y:24.00,w:22.00,h:32.00,label:"Picture",note:"What the part looks like."}], title:"Blue Prints: buy a design",
+     text:["The list is split by kind: OKE Body, Main Weapon, Sub Weapon (or Munitions) and All Kinds. Pick one to see its figures and price, then OK to buy.",
+           "You buy each blueprint once. After that the part is yours in Design and your factories can build it."]},
+    {pic:"negPrice", title:"Why prices change",
+     text:["Companies charge more when you are winning the war (up to 15%) and a little less when you are losing (up to 5%).",
+           "Regular customers get a better price, up to 15% off: buy from the same company often. Paid towards a design's R & D? You get 10% or 20% off it as well."]},
+    {pic:"negRnd", shot:"rnd-detail", shotSpots:[{x:48.40,y:14.60,w:45.40,h:28.00,label:"The design",note:"What the finished design will be. It is not on sale yet."},{x:48.40,y:52.50,w:45.40,h:7.50,label:"Price",note:"The amount you pay with this OK. You can pay again on later turns."},{x:48.40,y:61.00,w:45.40,h:8.50,label:"Total",note:"How much you have paid towards this design so far."},{x:31.50,y:59.50,w:15.00,h:10.00,label:"OK",note:"Pick OK to buy it. Already own it? The company says so instead."}], title:"R & D: fund a new design",
+     text:["R & D lists what the company is still developing. Paying towards it makes it arrive sooner and less likely to be delayed.",
+           "When it goes on sale you get a discount on it: 10% if you paid at least 80% of its price, 20% at 160%. Pay nothing and Drakken may buy it the moment it is finished."]},
+    {pic:"negOptimize", shot:"optimize-detail", shotSpots:[{x:48.40,y:21.00,w:45.40,h:36.00,label:"What improves",note:"What the improved body will be like: here lighter and tougher, but dearer to build."},{x:48.40,y:62.50,w:45.40,h:7.50,label:"Price",note:"What it costs now. Prices change with how the war is going and how good a customer you are."},{x:31.50,y:59.50,w:15.00,h:10.00,label:"OK",note:"Pick OK to buy it. Already own it? The company says so instead."},{x:30.00,y:73.00,w:64.00,h:17.00,label:"Turns",note:"How many turns it takes. When they are up, the improved body arrives as a new blueprint, free."}], title:"Optimization: improve a body",
+     text:["Only for some OKE bodies, and only ones you own. The screen shows what gets better or worse, the price and how many turns it takes.",
+           "You pay once. When the turns are up, the improved body arrives as a new blueprint, free (Prowler I: 16000, 12 turns)."]},
+    {pic:"negInfo", shot:"information", shotSpots:[{x:30.00,y:58.00,w:64.00,h:16.00,label:"News",note:"What the company has heard, or that it has nothing for you. Rival developments and sales to Drakken show up here."},{x:3.00,y:60.00,w:25.00,h:32.00,label:"The company",note:"Each company has its own representative. What they say at the bottom explains the screen."}], title:"Information: ask for news",
+     text:["Free. The company tells you what it has heard: what a rival is developing or has finished, or what it has sold to Drakken. Sometimes it has nothing.",
+           "Asking costs a little of the company's goodwill at the end of the turn, so don't overdo it."]},
+    {pic:"negEndTurn", title:"What happens at End Turn",
+     text:["Developments move on and finished designs go on sale (some are delayed). Your optimizations count down. Every other turn, goodwill fades a little if you stop buying.",
+           "Drakken does business too, with its own money. In an online game your opponent takes Drakken's place: what you buy is yours, and they can buy the same blueprints."]},
+  ],
+  deep:"negotiation" },
 ];
 
 /* ======================================================================
@@ -757,6 +881,11 @@ const DEEP_SHOTS = {
   units:[["formunit","Form Unit: an empty unit and the OKEs at the base."],["formunit-auto","After Auto: three OKEs in Unit No. 1."],
          ["base-unit","Back at the base: Unit 1, and less ammo and fuel in stock."],["deploy","Deploy Units: the unit waits on Standby."],
          ["orders","Picking the unit gives its orders."]],
+  negotiation:[["negotiation-intro","The first visit: an introduction to the companies."],["negotiation","The six companies."],
+         ["negotiation-office","Kawashima Corp's office: the four choices."],["blueprints","Blue Prints: what Kawashima sells, by kind."],
+         ["blueprint-detail","A CPU's figures and price, with OK to buy."],["optimize","Optimization: Prowler I can be improved."],
+         ["optimize-detail","What optimizing Prowler I changes, its price and turns."],["rnd","R & D at Union Claude: three designs in development."],
+         ["rnd-detail","Paying towards an engine: Price is this payment, Total is paid so far."],["information","Information: nothing new this time."]],
 };
 function addLocalExtras(L){
   if(!LOCAL) return;
@@ -830,7 +959,7 @@ DEEP.turn = function(root){
       {label:"Hardware", note:P("The parts: body, engine, weapons, computer, fuel tank, armor, option and paint. AUTO fills them in.")},
       {label:"Software", note:P("The chip program. See the lesson Programming chips.")},
       {label:"Test", note:P("A practice battle for the selected card. Nothing is spent.")}]}},
-    {label:"Negotiation", note:P("A lesson about Negotiation comes later.")},
+    {label:"Negotiation", note:P("Six arms companies sell blueprints: the designs for bodies, engines, weapons and other parts.","Buy them, pay towards new ones, improve a body you own, or ask for news. Everything is paid from your funds at once. See the lesson Negotiation.")},
     {label:"System", note:P("Save and load the campaign, and options.")},
     {label:"End Turn", note:P("Ends your turn. In order: units move along their orders (and fight if they meet an enemy), the enemy plans and moves, bases refuel, factories work, OKEs resting at bases repair a little. Then a new turn starts.","Win a map by taking every enemy base; lose it if you have no bases left.")},
   ]};
@@ -1048,6 +1177,49 @@ DEEP.units = function(root){
     setFocusables([...root.querySelectorAll(".gmenu .it:not(.off),.btn:not([disabled])")].filter(e=>!e.closest("header")),true);
   }
   draw();
+};
+
+DEEP.negotiation = function(root){
+  const P=(...a)=>a.map(t=>`<p>${t}</p>`).join("");
+  const STANCE=[["Losing badly",95,85],["Behind",100,90],["Even",100,95],["Ahead",105,100],["Winning big",115,100]];
+  let base=4000, stance=2, good=false, rd=0, rdPrice=20000, rdPaid=5000;
+  const top=["Negotiation","Turn 1","Funds 500000"];
+  const office=n=>({title:n, top, items:[
+    {label:"Blue Prints", note:P("What "+n+" sells, by kind: OKE Body, Main Weapon, Sub Weapon (or Munitions), All Kinds.","Pick one to see its figures and price; OK buys it. Already own it? The company tells you so.")},
+    {label:"R & D", note:P("Designs "+n+" is still developing. Pick one, then OK to pay the amount shown. Pay again on later turns to add to the Total.","Paying makes it arrive sooner and less likely to be delayed, and gets you a discount when it goes on sale.")},
+    {label:"Optimization", note:P("Bodies you own that "+n+" can improve. Shows what changes, the price and the turns.","Some companies have nothing to optimize for you yet.")},
+    {label:"Information", note:P("Free news: rival developments, finished designs, sales to Drakken. Costs a little goodwill at the end of the turn.")}]});
+  const names=["Kawashima Corp","Brenan","Mcmorell","AAC","Union Claude","Canyon Logic"];
+  const tree={title:"Negotiation", top, items:names.map(n=>({label:n, note:P("Visit "+n+"'s office.","Each company makes its own range of parts. Buying here often makes you a regular customer, with better prices."), children:office(n)}))};
+  root.innerHTML=`<div id="negMenu"></div><div class="rep" style="margin-top:16px"><div class="panel" id="negPrice"></div><div class="panel" id="negRd"></div></div>`;
+  menuExplorer(root.querySelector("#negMenu"), tree, "A copy of the Negotiation menus. Click (or A) to select; click again or OPEN to go in; BACK (or B) to go up.");
+  const m=root.querySelector("#negMenu"); root._back=m._back; root._focusSync=m._focusSync;
+  function price(){ const f=STANCE[stance][good?2:1]; let p=Math.floor(base*f/100); return Math.floor(p*(100-rd)/100); }
+  function drawCalc(){
+    const pr=root.querySelector("#negPrice"), r=root.querySelector("#negRd");
+    pr.innerHTML=`<span class="cap">PRICE CALCULATOR</span><h2>What a blueprint costs</h2>
+      <p>List price <input type="number" id="nBase" value="${base}" min="0" max="999999" style="width:90px"></p>
+      <p>The war <select id="nStance">${STANCE.map((s,i)=>`<option value="${i}" ${i===stance?"selected":""}>${s[0]}</option>`).join("")}</select></p>
+      <p><label><input type="checkbox" id="nGood" ${good?"checked":""}> Regular customer of this company</label></p>
+      <p>Your R &amp; D discount <select id="nRd"><option value="0" ${rd===0?"selected":""}>none</option><option value="10" ${rd===10?"selected":""}>10%</option><option value="20" ${rd===20?"selected":""}>20%</option></select></p>
+      <p>Price on the screen: <span class="on" style="font-size:20px">${price()}</span></p>
+      <p class="dim">A regular customer has bought there a lot recently. Goodwill fades if you stop buying.</p>`;
+    const share=rdPrice>0?rdPaid*100/rdPrice:0, disc=share>=160?20:share>=80?10:0;
+    r.innerHTML=`<span class="cap">R &amp; D CALCULATOR</span><h2>Will I get a discount?</h2>
+      <p>The design's price <input type="number" id="rPrice" value="${rdPrice}" min="1" max="999999" style="width:90px"></p>
+      <p>Paid in total (all turns) <input type="number" id="rPaid" value="${rdPaid}" min="0" max="999999" style="width:90px"></p>
+      <p>You have paid <span class="hi">${Math.floor(share)}%</span> of its price: discount when it goes on sale
+      <span class="on" style="font-size:20px">${disc?disc+"%":"none"}</span>${disc<20?` <span class="dim">(${disc?"20% at 160%":"10% at 80%"}: pay ${Math.max(0,Math.ceil(rdPrice*(disc?1.6:0.8))-rdPaid)} more)</span>`:""}.</p>
+      <p>${disc===20?"You also keep Drakken from buying it for a few turns (if you paid more than Drakken did).":"Paying more makes it arrive sooner, down to a minimum of 8 turns."}</p>`;
+    const q=id=>root.querySelector(id);
+    q("#nBase").onchange=e=>{base=Math.max(0,+e.target.value||0);drawCalc();};
+    q("#nStance").onchange=e=>{stance=+e.target.value;drawCalc();};
+    q("#nGood").onchange=e=>{good=e.target.checked;drawCalc();};
+    q("#nRd").onchange=e=>{rd=+e.target.value;drawCalc();};
+    q("#rPrice").onchange=e=>{rdPrice=Math.max(1,+e.target.value||1);drawCalc();};
+    q("#rPaid").onchange=e=>{rdPaid=Math.max(0,+e.target.value||0);drawCalc();};
+  }
+  drawCalc();
 };
 
 /* ---------------- keyboard and controller ---------------- */

@@ -148,6 +148,7 @@ jobs:
                       src/disc_autodetect.c seeds/ psxrecomp/psxrecomp_cli.py recomp-ui/ \
                       launcher/ch_setup_log.inc launcher/ch_setup_tee.py cmake/ch_setup_log.cmake \
                       launcher/ch_apk_share.cpp launcher/third_party/qrcodegen/qrcodegen.c tutorials/index.html \
+                      tutorials/make_pictures.py tutorials/capture_script.txt src/tutorial_capture.c \
                       psxrecomp/recompiler/lib/rabbitizer/include/generated/InstrId_enum.h \
                       psxrecomp/recompiler/lib/rabbitizer/cplusplus/include/generated/; do
             grep -q "^${must}" <<<"${LIST}" || { echo "::error::kit lacks ${must}"; exit 1; }
@@ -160,6 +161,12 @@ jobs:
           if [[ -n "${BAD}" ]]; then
             echo "${BAD}"
             echo "::error::kit contains disc/BIOS/save data or generated game C"; exit 1
+          fi
+          # Tutorial pictures are made on the player's PC only (INSTALL TUTORIALS).
+          TUT="$(grep -iE '^tutorials/(local/|.*\.(png|jpe?g|tim|gif|webp)$)' <<<"${LIST}" || true)"
+          if [[ -n "${TUT}" ]]; then
+            echo "${TUT}"
+            echo "::error::kit contains tutorial pictures (they must be made on the player's PC)"; exit 1
           fi
 
       - uses: actions/upload-artifact@v4

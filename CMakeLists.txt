@@ -146,6 +146,7 @@ psxrecomp_select_guest_implementation(
     HLE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/mouse_pad_hle.c"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/pointer_menu.c"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/screen_labels.c"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/tutorial_capture.c"
     REFERENCE_PREFIX ch_mouse_lle_
     SNAPSHOT_TAG 0x43484D31)
 endif()

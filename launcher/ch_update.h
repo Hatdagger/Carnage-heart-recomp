@@ -74,5 +74,12 @@ bool start_android_build(std::string* why);
  * once; false with the reason when it can't. */
 bool tutorials_available();
 bool open_tutorials(std::string* why);
+/* INSTALL TUTORIALS: the pictures are made on this PC from the player's own
+ * disc and game (tutorials/make_pictures.py; nothing from the game is ever
+ * shipped). tutorials_made() is true when tutorials/local/done.txt exists;
+ * start_tutorial_install() opens the picture maker in its own console window
+ * and returns at once; false with the reason when it can't. */
+bool tutorials_made();
+bool start_tutorial_install(std::string* why);
 
 } /* namespace ch_update */

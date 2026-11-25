@@ -997,4 +997,72 @@ bool open_tutorials(std::string* why) {
 #endif
 }
 
+bool tutorials_made() {
+    const fs::path root = kit_root();
+    std::error_code ec;
+    return !root.empty() && fs::is_regular_file(root / "tutorials" / "local" / "done.txt", ec);
+}
+
+bool start_tutorial_install(std::string* why) {
+    const fs::path root = kit_root();
+    std::error_code ec;
+    const fs::path script = root / "tutorials" / "make_pictures.py";
+    if (root.empty() || !fs::is_regular_file(script, ec)) {
+        if (why) *why = "THE TUTORIAL MAKER IS NOT IN THIS VERSION";
+        return false;
+    }
+    QuickTools t;
+    if (!quick_tools(root, &t)) {
+        if (why) *why = "PYTHON FROM THE COMPILER PACK NOT FOUND. INSTALL THE GAME FIRST";
+        return false;
+    }
+#ifdef _WIN32
+    /* Its own console: the progress stays readable and it waits for a key. */
+    std::wstring cmd = L"\"" + t.python.wstring() + L"\" \"" + script.wstring() + L"\" \"" +
+                       root.wstring() + L"\" --pause";
+    std::vector<wchar_t> buf(cmd.begin(), cmd.end()); buf.push_back(0);
+    STARTUPINFOW si; PROCESS_INFORMATION pi;
+    std::memset(&si, 0, sizeof si); si.cb = sizeof si;
+    std::memset(&pi, 0, sizeof pi);
+    const std::wstring cwd = root.wstring();
+    if (!CreateProcessW(t.python.c_str(), buf.data(), nullptr, nullptr, FALSE,
+                        CREATE_NEW_CONSOLE, nullptr, cwd.c_str(), &si, &pi)) {
+        if (why) *why = "COULD NOT OPEN THE TUTORIAL WINDOW";
+        return false;
+    }
+    CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
+    return true;
+#else
+    const std::string sc = script.string(), kit = root.string();
+    const std::string run = "python3 \"$0\" \"$1\" --pause";
+    struct Term { const char* exe; const char* flag; };
+    static const Term terms[] = {
+        { "x-terminal-emulator", "-e" }, { "gnome-terminal", "--" },
+        { "konsole", "-e" }, { "xfce4-terminal", "-x" }, { "xterm", "-e" },
+    };
+    for (const Term& tm : terms) {
+        std::vector<std::string> args = { tm.exe, tm.flag, "bash", "-c", run, sc, kit };
+        std::vector<char*> argv;
+        for (std::string& a : args) argv.push_back(a.data());
+        argv.push_back(nullptr);
+        pid_t pid = 0;
+        if (posix_spawnp(&pid, tm.exe, nullptr, nullptr, argv.data(), environ) == 0)
+            return true;
+    }
+    /* No terminal (e.g. Steam Deck game mode): run it quietly in the
+     * background; the launcher row changes when it has finished. */
+    {
+        std::vector<std::string> args = { "python3", sc, kit };
+        std::vector<char*> argv;
+        for (std::string& a : args) argv.push_back(a.data());
+        argv.push_back(nullptr);
+        pid_t pid = 0;
+        if (posix_spawnp(&pid, "python3", nullptr, nullptr, argv.data(), environ) == 0)
+            return true;
+    }
+    if (why) *why = "COULD NOT START tutorials/make_pictures.py";
+    return false;
+#endif
+}
+
 } /* namespace ch_update */

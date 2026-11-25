@@ -79,6 +79,10 @@ When the launcher opens, it checks for a newer version. If there is one, a 10-se
 
 If setup fails, open `setup-log.txt` in the same folder as the exe. It records every setup step, including the build that runs in a console window after the wizard closes. Send that file when you report a problem.
 
+### Tutorials
+
+Once the game is installed, the launcher shows **INSTALL TUTORIALS**. It makes the lessons' pictures on your PC from your own disc and game: portraits and part pictures are read from the disc image, and the game runs hidden for about three minutes (a new Practice game, nothing saved) while it takes screenshots of the menus. A window shows the progress. Afterwards the row reads **TUTORIALS** and opens the lessons in your web browser (they work offline); **MAKE THE PICTURES AGAIN** retakes them, e.g. after an update. The pictures stay in `tutorials/local/` and are never uploaded or shipped. If the hidden window gives no pictures on your PC, a normal game window opens instead: don't click in it until it closes. Details: `tutorials/local/make-pictures-log.txt`.
+
 ### Android app
 
 Once the game is installed, the launcher shows **BUILD ANDROID APP**. It opens a window that builds `CarnageHeart.apk` from your installed game (the first time it downloads the Android tools once). When it finishes, the launcher shows a QR code: scan it with the tablet's camera (tablet on the same Wi-Fi as the PC) and a page opens where you can download the app and your disc files straight from the PC. The link works only while that screen is open, and **SEND APP TO TABLET** on the main menu shows it again later. If Windows asks about the firewall, allow private networks. You can still copy `CarnageHeart.apk` from the game folder by cable instead.

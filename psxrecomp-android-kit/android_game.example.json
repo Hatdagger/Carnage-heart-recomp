@@ -1,0 +1,27 @@
+{
+  "_comment": "Copy to your game's root as android_game.json. Every key is explained in docs/SETTINGS.md. Keys starting with _ are ignored.",
+
+  "package": "com.yourname.yourgame",
+  "app_name": "Your Game",
+  "title": "YOUR GAME",
+
+  "exe_name": "YourGame_Recompiled",
+  "generated_check": "generated/SLUS_000.00_dispatch.c",
+
+  "log_tag": "YourGame",
+  "log_name": "yourgame",
+  "data_dir_name": "YourGame",
+
+  "default_scale": "3x",
+  "accent": "#7CFF9A",
+  "background": "#06140A",
+
+  "disc_prompt": "Choose your Your Game (USA) disc.\n\nSelect the .cue file and all of its .bin files together\n(tap and hold the first one, then tap the others),\nor a single .chd file.\n\nThey are copied into the app once.",
+
+  "res_dir": "android/res",
+  "java_dir": "",
+  "java_hooks": "",
+  "extra_buttons": [],
+  "permissions": [],
+  "manifest_application_xml": ""
+}

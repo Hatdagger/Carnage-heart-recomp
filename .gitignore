@@ -97,3 +97,6 @@ starvation_dump.jsonl
 *.apk.idsig
 *.keystore
 /build-appimage/
+
+# Tutorial pictures made on the player's PC (tutorials/make_pictures.py); never committed or shipped.
+/tutorials/local/

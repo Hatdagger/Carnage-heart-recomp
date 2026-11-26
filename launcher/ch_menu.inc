@@ -1,4 +1,4 @@
-/* Carnage Heart launcher menu: LAUNCH GAME, ONLINE PLAY, SHARE DATA, UPDATE,
+/* Carnage Heart launcher menu: LAUNCH GAME, ONLINE PLAY, SHARE DATA, TUTORIALS, UPDATE,
  * SETTINGS, plus the automatic update countdown when the launcher opens.
  *
  * Included into recomp-ui's launcher_imgui.cpp by cmake/ch_launcher_menu.cmake
@@ -32,6 +32,7 @@ enum Page { PAGE_MAIN = 0, PAGE_ONLINE, PAGE_SHARE, PAGE_UPDATE, PAGE_SETTINGS,
             PAGE_CAMPAIGN, PAGE_CGAME, PAGE_JOIN,   /* ch_online_menu.inc */
             PAGE_APK,                               /* send the app to a tablet */
             PAGE_AUTO,                              /* automatic update countdown */
+            PAGE_TUTORIALS,                         /* open / make the pictures again */
             PAGE__COUNT };
 
 struct State {
@@ -774,14 +775,47 @@ static void draw_apk_page(LauncherModel* m, const Gfx& g, const Input& in) {
     }
 }
 
+/* ---- TUTORIALS (after the pictures are made) ---------------------------------- */
+
+static std::string g_tut_msg;   /* last INSTALL TUTORIALS / MAKE AGAIN result */
+static bool        g_tut_ok = false;
+
+static void draw_tutorials_page(LauncherModel*, const Gfx& g, const Input& in) {
+    const Item items[] = {
+        { "OPEN TUTORIALS", "", true,
+          "Opens the lessons in your web browser (works without the internet). "
+          "Each lesson has a QUICK GUIDE (a few slides) and an IN-DEPTH LOOK "
+          "where you can try things: a practice chip grid and copies of the "
+          "game's menus to click through." },
+        { "MAKE THE PICTURES AGAIN", "", true,
+          "Runs the game hidden for a few minutes again and retakes the "
+          "screenshots from your disc, for example after an update. The "
+          "lessons keep working while it runs." },
+    };
+    bool back = false;
+    const int act = list_page(g, in, PAGE_TUTORIALS, "TUTORIALS", "HOW TO PLAY",
+                              items, 2, "ABOUT", &back);
+    if (!g_tut_msg.empty())
+        text(g, 324.0f, 378.0f, 11.0f, g_tut_ok ? kOn : kWarn, g_tut_msg.c_str(), 278.0f);
+    if (in.back || back) { g_tut_msg.clear(); open_page(PAGE_MAIN); return; }
+    std::string why;
+    if (act == 0) {
+        g_tut_ok = ch_update::open_tutorials(&why);
+        g_tut_msg = g_tut_ok ? "TUTORIALS OPENED IN YOUR WEB BROWSER" : why;
+    } else if (act == 1) {
+        g_tut_ok = ch_update::start_tutorial_install(&why);
+        g_tut_msg = g_tut_ok ? "MAKING THE PICTURES IN A NEW WINDOW" : why;
+    }
+}
+
 /* ---- main page ------------------------------------------------------------- */
 
-enum MainEntry { MAIN_LAUNCH = 0, MAIN_ONLINE, MAIN_SHARE, MAIN_UPDATE, MAIN_ANDROID, MAIN_SEND_APK,
+enum MainEntry { MAIN_LAUNCH = 0, MAIN_ONLINE, MAIN_SHARE, MAIN_TUTORIALS, MAIN_UPDATE, MAIN_ANDROID, MAIN_SEND_APK,
                  MAIN_SETTINGS, MAIN_EXIT };
 
 static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
     struct Entry { MainEntry id; const char* label; const char* info; };
-    Entry entries[9];
+    Entry entries[10];
     int count = 0;
     const bool install = needs_install(m);
     if (m->in_session)
@@ -800,6 +834,27 @@ static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
             "shared campaign map where you take turns." };
         entries[count++] = { MAIN_SHARE, "SHARE DATA",
             "Trade OKE designs and chip programs with other players." };
+        /* Tutorials are an extra install once the game is built: the
+         * pictures are made here from the player's own disc and game. */
+        static bool tut_made = false;          /* looked at once a second */
+        static double tut_next_look = 0.0;
+        if (ImGui::GetTime() >= tut_next_look) {
+            tut_next_look = ImGui::GetTime() + 1.0;
+            tut_made = ch_update::tutorials_made();
+        }
+        if (!install && ch_update::tutorials_available())
+            entries[count++] = tut_made
+                ? Entry{ MAIN_TUTORIALS, "TUTORIALS",
+                    "How to play, in your web browser (works without the internet). "
+                    "Each lesson has a QUICK GUIDE (a few slides) and an IN-DEPTH LOOK "
+                    "where you can try things: a practice chip grid and copies of the "
+                    "game's menus to click through." }
+                : Entry{ MAIN_TUTORIALS, "INSTALL TUTORIALS",
+                    "Adds the how-to-play lessons. Their pictures are made on this "
+                    "PC from your own disc and game: a window shows the progress "
+                    "while the game runs hidden for a few minutes and takes the "
+                    "screenshots. Nothing is downloaded. When it is done this row "
+                    "reads TUTORIALS and the lessons open in your web browser." };
         entries[count++] = { MAIN_UPDATE, "UPDATE",
             "Look for a newer version and install it when you choose. Your disc, "
             "saves and settings are not touched." };
@@ -896,6 +951,8 @@ static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
     panel(g, 310.0f, 242.0f, 306.0f, 174.0f, "INFO");
     text(g, 324.0f, 258.0f, 11.0f, kHi, entries[cur].label);
     text(g, 324.0f, 280.0f, 11.0f, kText, entries[cur].info, 278.0f);
+    if (entries[cur].id == MAIN_TUTORIALS && !g_tut_msg.empty() && !ch_update::tutorials_made())
+        text(g, 324.0f, 378.0f, 11.0f, g_tut_ok ? kOn : kWarn, g_tut_msg.c_str(), 278.0f);
     if (entries[cur].id == MAIN_ANDROID && !g_android_msg.empty())
         text(g, 324.0f, 398.0f, 11.0f, g_android_ok ? kOn : kWarn, g_android_msg.c_str(), 278.0f);
 
@@ -907,6 +964,13 @@ static void draw_main(LauncherModel* m, const Gfx& g, const Input& in) {
         case MAIN_LAUNCH:   launch_game(m); break;
         case MAIN_ONLINE:   open_page(PAGE_ONLINE); break;
         case MAIN_SHARE:    open_page(PAGE_SHARE); break;
+        case MAIN_TUTORIALS: {
+            if (ch_update::tutorials_made()) { g_tut_msg.clear(); open_page(PAGE_TUTORIALS); break; }
+            std::string why;
+            g_tut_ok = ch_update::start_tutorial_install(&why);
+            g_tut_msg = g_tut_ok ? "MAKING THE PICTURES. THIS ROW READS TUTORIALS WHEN IT IS DONE" : why;
+            break;
+        }
         case MAIN_UPDATE:   open_page(PAGE_UPDATE); break;
         case MAIN_ANDROID: {
             std::string why;
@@ -1093,6 +1157,7 @@ static void draw(LauncherModel* m, const LauncherTheme&) {
             case PAGE_JOIN:   draw_join_page(m, g, in); break;
             case PAGE_APK:    draw_apk_page(m, g, in); break;
             case PAGE_AUTO:   draw_auto_page(m, g, in); break;
+            case PAGE_TUTORIALS: draw_tutorials_page(m, g, in); break;
             default:          draw_main(m, g, in); break;
         }
     }

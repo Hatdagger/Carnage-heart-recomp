@@ -15,6 +15,7 @@
 #include "cpu_state.h"
 #include "pointer_menu.h"
 #include "screen_labels.h"
+#include "tutorial_capture.h"
 
 #ifdef CH_MOUSE_SELFTEST
 /* Test-only: fake a PS1 Mouse on port 1. Each line appended to the file named
@@ -145,7 +146,12 @@ void func_8003E154(CPUState *cpu)
     cpu->write_word(PAD_PREV, buttons);
 
     const int real_mouse = (type & 0xF0u) == 0x10u;
-    if (!real_mouse && ch_pointer_enabled()) {
+    /* Tutorial picture capture (src/tutorial_capture.c): a script replaces
+     * the controller. Off unless CH_TUTORIAL_CAPTURE is set. */
+    const int capture = ch_capture_frame(cpu, pad_reads - screen_seen <= 4u ? screen_ra : 0u);
+    if (capture) {
+        pointer_mode = 0;   /* the game's arrow is hidden while capturing */
+    } else if (!real_mouse && ch_pointer_enabled()) {
         /* Host pointer mode (src/pointer_menu.c): the pad on port 1 keeps all
          * its buttons, and the window pointer or touch drives the game's own
          * mouse cursor. Whichever was used last decides the mode: moving or
@@ -368,7 +374,7 @@ void ch_mouse_lle_func_8003E4C8(CPUState *cpu);
 void func_8003E4C8(CPUState *cpu)
 {
     const int fresh = (cpu->pc == 0u || cpu->pc == 0x8003E4C8u);
-    if (fresh && pointer_mode && cpu->read_word(MOUSE_MODE) != 0) {
+    if (fresh && ((pointer_mode && cpu->read_word(MOUSE_MODE) != 0) || ch_capture_enabled())) {
         cpu->pc = cpu->gpr[31]; /* jr $ra: nothing drawn */
         return;
     }

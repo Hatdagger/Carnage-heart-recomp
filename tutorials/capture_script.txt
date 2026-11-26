@@ -1,0 +1,177 @@
+# Carnage Heart tutorial screenshots (read by src/tutorial_capture.c).
+# Started by tutorials/make_pictures.py; commands are explained in
+# src/tutorial_capture.c. A new Europa (Practice) game, turn 1. Nothing is
+# saved. Coordinates are on the game screen (512 x 240); the screen values
+# are the menus' hotspot callers (src/screen_labels.c).
+# Shot names are used by tutorials/index.html.
+
+# Title screen (after the intro film), START GAME, Europa (Practice).
+screen 8007E598 4000
+wait 20
+shot title
+press start
+screen 8007F13C
+wait 20
+shot scenario
+press cross
+screen 80037D30
+wait 40
+shot command
+
+# ---- Tactics: base, Form Unit, Deploy Units, Factory
+click 134 65
+screen 80039544
+wait 40
+shot base
+click 142 83
+wait 90
+shot formunit-intro
+press cross
+wait 60
+shot formunit
+click 165 201
+wait 60
+shot formunit-auto
+press circle
+screen 80039544
+wait 40
+shot base-unit
+click 142 65
+wait 90
+press cross
+wait 60
+shot deploy
+click 114 72
+wait 60
+shot orders
+press circle
+wait 40
+press circle
+screen 80039544
+wait 40
+click 142 101
+screen 80056E78
+wait 40
+shot factory
+press cross
+wait 60
+shot production-intro
+press cross
+wait 60
+shot production
+press circle
+wait 40
+press circle
+screen 80039544
+wait 20
+press circle
+screen 80037D30
+wait 30
+
+# ---- Negotiation: companies, Blue Prints, Optimization, Information, R & D
+click 134 101
+wait 120
+shot negotiation-intro
+press cross
+screen 8004CC5C
+wait 40
+shot negotiation
+click 120 65
+wait 90
+shot negotiation-office
+click 120 65
+wait 90
+shot blueprints
+click 300 105
+wait 90
+shot blueprint-detail
+press circle
+wait 60
+press circle
+wait 60
+click 120 101
+wait 90
+shot optimize
+click 300 69
+wait 90
+shot optimize-detail
+press circle
+wait 60
+press circle
+wait 60
+press circle
+wait 60
+click 120 137
+wait 90
+click 120 83
+wait 90
+shot rnd
+click 300 69
+wait 90
+shot rnd-detail
+press circle
+wait 60
+press circle
+wait 60
+click 120 119
+wait 90
+shot information
+press cross
+wait 90
+press circle
+wait 60
+press circle
+screen 80037D30 600
+wait 30
+
+# ---- Design: cards, hardware (Auto), software (Auto)
+click 134 83
+screen 80038514
+wait 30
+shot design
+press cross
+wait 60
+press cross
+wait 60
+shot cards
+press cross
+screen 80038514
+wait 30
+shot design-card
+click 137 83
+wait 90
+shot hardware-intro
+press cross
+wait 60
+shot hardware-empty
+click 349 186
+wait 60
+shot hardware-confirm
+click 373 220
+wait 120
+shot hardware
+click 445 209
+screen 80038514
+wait 40
+shot design-done
+click 137 101
+wait 90
+shot software-intro
+press cross
+wait 60
+shot software
+click 67 195
+wait 60
+shot software-list
+press circle
+wait 60
+click 67 179
+wait 60
+shot software-etc
+click 155 123
+wait 60
+shot software-confirm
+click 336 219
+wait 120
+shot software-auto
+quit

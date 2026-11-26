@@ -73,6 +73,10 @@ Pointer mode is off during netplay. Set `CH_POINTER=0` to turn it off.
 
 No game data or recompiled code is downloaded; everything game-specific comes from your disc.
 
+### Updates
+
+When the launcher opens, it checks for a newer version. If there is one, a 10-second countdown appears: when it runs out (or you pick **UPDATE NOW**) the launcher downloads and installs the update, rebuilds the game with it and then opens again by itself. Pick **NOT NOW** (or press B / Esc / right click) to skip it this time; you are asked again the next time the launcher opens, and **UPDATE** in the menu installs it whenever you like. Your disc image, memory cards, settings and online games are never touched. Without internet the check fails quietly. To turn the automatic check off, set the environment variable `CH_NO_AUTO_UPDATE=1`.
+
 If setup fails, open `setup-log.txt` in the same folder as the exe. It records every setup step, including the build that runs in a console window after the wizard closes. Send that file when you report a problem.
 
 ### Android app

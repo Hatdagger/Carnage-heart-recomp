@@ -1,5 +1,5 @@
 /* Carnage Heart launcher menu: LAUNCH GAME, ONLINE PLAY, SHARE DATA, UPDATE,
- * SETTINGS.
+ * SETTINGS, plus the automatic update countdown when the launcher opens.
  *
  * Included into recomp-ui's launcher_imgui.cpp by cmake/ch_launcher_menu.cmake
  * (a build-time copy of that file with a two-line hook; the recomp-ui
@@ -31,6 +31,7 @@ namespace ch_menu {
 enum Page { PAGE_MAIN = 0, PAGE_ONLINE, PAGE_SHARE, PAGE_UPDATE, PAGE_SETTINGS,
             PAGE_CAMPAIGN, PAGE_CGAME, PAGE_JOIN,   /* ch_online_menu.inc */
             PAGE_APK,                               /* send the app to a tablet */
+            PAGE_AUTO,                              /* automatic update countdown */
             PAGE__COUNT };
 
 struct State {
@@ -459,6 +460,191 @@ static void draw_update_page(LauncherModel* m, const Gfx& g, const Input& in) {
         else note("CLOSE THE LAUNCHER AND START CARNAGEHEART_RECOMPILED AGAIN");
     } else if (act == 1 && can_apply) {
         ch_update::download_and_apply();
+    }
+}
+
+/* ---- automatic update when the launcher opens ------------------------------------ */
+
+/* Once per launcher run, when it opens to the main page (not from a running
+ * game), the launcher asks GitHub for a newer release. If there is one, the
+ * AUTO page counts down from kAutoSeconds with NOT NOW selected; when it runs
+ * out (or on UPDATE NOW) it downloads and installs, then restarts into the
+ * rebuild, which reopens the launcher when it is done. NOT NOW keeps nothing:
+ * the next launcher start asks again. A failed check says nothing (offline is
+ * fine); the UPDATE page still shows its message. */
+static const double kAutoSeconds = 10.0;
+
+struct AutoUpdate {
+    bool   asked = false;       /* the check was started this run */
+    bool   waiting = false;     /* ...and its answer has not been handled */
+    bool   kick_checked = false;/* looked for the rebuild note once */
+    bool   going = false;       /* countdown over or UPDATE NOW: installing */
+    double deadline = 0.0;      /* when the countdown runs out */
+    double restart_at = 0.0;    /* when Done was seen + a moment to read it */
+    bool   restart_failed = false;
+};
+static AutoUpdate g_auto;
+
+static bool on_plain_main(const LauncherModel* m) {
+    return !m->in_session && m->view == LNG_VIEW_DASHBOARD &&
+           g_state.page == PAGE_MAIN && !m->setup_wizard_open && !m->setup_preparing;
+}
+
+static void auto_update_tick(LauncherModel* m) {
+    using ch_update::State;
+    /* After an automatic update whose rebuild is the full one, this is the
+     * setup exe starting with no game code: do Generate & rebuild at once
+     * (progress window only), as the wizard's button would. */
+    if (!g_auto.kick_checked && m->setup_wizard_supported) {
+        g_auto.kick_checked = true;
+        if (ch_update::take_auto_rebuild_request() && needs_install(m) &&
+            !m->setup_preparing && m->rom_present && m->rom_full[0]) {
+            const bool tools = !m->setup_needs_toolchain ||
+                               m->setup_tc_ready ||
+                               (m->toolchain_is_ready_cb && m->toolchain_is_ready_cb());
+            if (tools) {
+                m->setup_tc_ready = true;
+                m->setup_wizard_open = false;
+                launcher_model_start_prepare_disc(m, m->rom_full);
+                g_auto.asked = true;     /* no update check during the rebuild */
+                return;
+            }
+            /* Tools missing: the wizard stays open and the player goes on there. */
+        }
+    }
+    if (!g_auto.asked) {
+        if (!on_plain_main(m) || needs_install(m)) return;
+        g_auto.asked = true;
+        std::string why;
+        const ch_update::Snapshot s = ch_update::snapshot();
+        if (!ch_update::auto_check_allowed() || !ch_update::supported(&why) ||
+            s.current == "dev" || s.state != State::Idle)
+            return;
+        g_auto.waiting = true;
+        ch_update::check();
+        return;
+    }
+    if (!g_auto.waiting) return;
+    const ch_update::Snapshot s = ch_update::snapshot();
+    if (s.state == State::Checking) return;
+    if (s.state != State::Available) { g_auto.waiting = false; return; }
+    /* Found one: show the countdown, but only over the plain main page (not
+     * over a page the player has opened meanwhile, and never in a game). */
+    if (!on_plain_main(m)) {
+        if (m->in_session) g_auto.waiting = false;
+        return;
+    }
+    g_auto.waiting = false;
+    g_auto.going = false;
+    g_auto.restart_at = 0.0;
+    g_auto.restart_failed = false;
+    g_auto.deadline = ImGui::GetTime() + kAutoSeconds;
+    open_page(PAGE_AUTO);
+    g_state.cursor[PAGE_AUTO] = 1;          /* NOT NOW: a stray A press keeps things as they are */
+}
+
+static void draw_auto_page(LauncherModel* m, const Gfx& g, const Input& in) {
+    using ch_update::State;
+    const ch_update::Snapshot s = ch_update::snapshot();
+    const double now = ImGui::GetTime();
+    const bool counting = !g_auto.going && s.state == State::Available;
+    const bool working = s.state == State::Downloading || s.state == State::Applying;
+    const bool done = s.state == State::Done;
+    const bool failed = s.state == State::Failed || g_auto.restart_failed ||
+                        (!counting && !working && !done);
+
+    header(g, "UPDATE AVAILABLE", counting ? "STARTS BY ITSELF" : "UPDATING");
+
+    /* Rows: UPDATE NOW + NOT NOW while counting; CONTINUE after a failure. */
+    const char* labels[2] = { "UPDATE NOW", "NOT NOW" };
+    int count = 2;
+    if (failed) { labels[0] = "CONTINUE"; count = 1; }
+    const bool rows_live = counting || failed;
+    if (rows_live) move_cursor(PAGE_AUTO, count, in, count);
+    int& cur = g_state.cursor[PAGE_AUTO];
+    if (cur >= count) cur = count - 1;
+    panel(g, 24.0f, 76.0f, 592.0f, 26.0f + kRowH * 2.0f, "SELECT");
+    int act = -1;
+    for (int i = 0; i < 2; ++i) {
+        if (i >= count && failed) break;
+        const RowHit h = row(g, 25.0f, 90.0f + kRowH * i, 590.0f, rows_live && i == cur,
+                             rows_live, labels[i], "", false, false);
+        if (rows_live && h.hovered && mouse_moved()) cur = i;
+        if (rows_live && h.click) act = i;
+    }
+    if (rows_live && in.confirm) act = cur;
+
+    panel(g, 24.0f, 168.0f, 592.0f, 248.0f, "VERSION");
+    char buf[200];
+    text(g, 38.0f, 184.0f, 11.0f, kDim, "INSTALLED");
+    text(g, 170.0f, 184.0f, 11.0f, kText, s.current.c_str());
+    text(g, 38.0f, 203.0f, 11.0f, kDim, "NEW");
+    text(g, 170.0f, 203.0f, 11.0f, kHi, s.latest.c_str());
+    if (counting) {
+        const int left = std::max(0, (int)std::ceil(g_auto.deadline - now));
+        std::snprintf(buf, sizeof buf, "UPDATING IN %d SECOND%s", left, left == 1 ? "" : "S");
+        text(g, 38.0f, 230.0f, 16.0f, kHi, buf);
+        const float w = 540.0f;
+        const float f = (float)std::max(0.0, std::min(1.0, (g_auto.deadline - now) / kAutoSeconds));
+        g.dl->AddRect(at(g, 38.0f, 256.0f), at(g, 38.0f + w, 262.0f), kLine);
+        g.dl->AddRectFilled(at(g, 39.0f, 257.0f), at(g, 39.0f + (w - 2.0f) * f, 261.0f), kHi);
+        text(g, 38.0f, 280.0f, 11.0f, kText,
+             "The new version is downloaded and installed, then the game is "
+             "rebuilt with it (usually a few minutes) and this launcher opens "
+             "again by itself. Your disc image, memory cards, settings and "
+             "online games are not touched.\n\n"
+             "NOT NOW skips it for this time: you are asked again the next time "
+             "the launcher opens, and UPDATE in the menu can install it any time.",
+             560.0f);
+    } else if (working) {
+        text(g, 38.0f, 230.0f, 13.0f, kText, s.message.c_str(), 560.0f);
+        if (s.state == State::Downloading) {
+            const float w = 540.0f;
+            const float f = s.total ? std::min(1.0f, (float)((double)s.done / (double)s.total)) : 0.0f;
+            g.dl->AddRect(at(g, 38.0f, 254.0f), at(g, 38.0f + w, 266.0f), kLine);
+            g.dl->AddRectFilled(at(g, 39.0f, 255.0f), at(g, 39.0f + (w - 2.0f) * f, 265.0f), kHi);
+            std::snprintf(buf, sizeof buf, "%.1f / %.1f MB", s.done / 1048576.0, s.total / 1048576.0);
+            text(g, 38.0f, 271.0f, 10.0f, kDim, buf);
+        }
+        text(g, 38.0f, 300.0f, 11.0f, kWarn, "DO NOT CLOSE THE LAUNCHER WHILE THIS RUNS.", 560.0f);
+    } else if (done && !g_auto.restart_failed) {
+        text(g, 38.0f, 230.0f, 13.0f, kOn, s.message.c_str(), 560.0f);
+        text(g, 38.0f, 256.0f, 11.0f, kText,
+             "Restarting to rebuild the game. A window shows the progress; the "
+             "launcher opens again when it is finished.", 560.0f);
+    } else {
+        const char* why = g_auto.restart_failed
+            ? "THE UPDATE IS INSTALLED, BUT THE REBUILD COULD NOT BE STARTED. "
+              "CLOSE THE LAUNCHER AND START CARNAGEHEART_RECOMPILED AGAIN."
+            : (s.message.empty() ? "THE UPDATE DID NOT WORK." : s.message.c_str());
+        text(g, 38.0f, 230.0f, 11.0f, kWarn, why, 560.0f);
+        text(g, 38.0f, 270.0f, 11.0f, kText,
+             "Nothing else was changed. You can play as before and try again "
+             "later from UPDATE in the menu. The details are in setup-log.txt "
+             "in the game folder.", 560.0f);
+    }
+    const bool back = footer(g, counting ? "A / ENTER / LEFT CLICK  SELECT      B / ESC / RIGHT CLICK  NOT NOW"
+                                         : failed ? "A / ENTER / LEFT CLICK  CONTINUE" : "",
+                             rows_live);
+
+    if (counting) {
+        if (in.back || back || act == 1) { open_page(PAGE_MAIN); return; }
+        if (act == 0 || now >= g_auto.deadline) {
+            g_auto.going = true;
+            ch_update::download_and_apply();
+        }
+        return;
+    }
+    if (failed) {
+        if (in.back || back || act == 0) open_page(PAGE_MAIN);
+        return;
+    }
+    if (done) {
+        if (g_auto.restart_at == 0.0) g_auto.restart_at = now + 2.0;
+        if (now >= g_auto.restart_at) {
+            if (ch_update::restart_into_rebuild(true)) m->action = LNG_ACTION_QUIT;
+            else g_auto.restart_failed = true;
+        }
     }
 }
 
@@ -906,6 +1092,7 @@ static void draw(LauncherModel* m, const LauncherTheme&) {
             case PAGE_CGAME:  draw_cgame_page(m, g, in); break;
             case PAGE_JOIN:   draw_join_page(m, g, in); break;
             case PAGE_APK:    draw_apk_page(m, g, in); break;
+            case PAGE_AUTO:   draw_auto_page(m, g, in); break;
             default:          draw_main(m, g, in); break;
         }
     }
@@ -913,6 +1100,7 @@ static void draw(LauncherModel* m, const LauncherTheme&) {
     if (g_apk_serving && (m->view != LNG_VIEW_DASHBOARD || g_state.page != PAGE_APK || m->in_session))
         apk_page_close();
     watch_android_build(m);
+    auto_update_tick(m);
     g.dl->PopClipRect();
 }
 

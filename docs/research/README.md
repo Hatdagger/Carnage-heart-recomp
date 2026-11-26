@@ -4,9 +4,10 @@ Findings from mapping the game for multiplayer, and the first multiplayer code. 
 
 | Doc | What |
 |---|---|
-| [CAMPAIGN_RAM_MAP.md](CAMPAIGN_RAM_MAP.md) | Campaign memory: units, bases, OKEs, cards, end-of-turn routine, battles |
+| [CAMPAIGN_RAM_MAP.md](CAMPAIGN_RAM_MAP.md) | Campaign memory: units, bases, OKEs, cards, end-of-turn routine, battles, negotiation and research |
 | [VS_MODE_AND_SAVES.md](VS_MODE_AND_SAVES.md) | VS mode, the shared battle engine, memory card and save format, and remote-player battles (`src/remote_battle.c`) |
 | [MULTIPLAYER_PLAN.md](MULTIPLAYER_PLAN.md) | The plan for online campaign versus, live VS and card sharing; the hot-seat test (`src/hotseat.c`); turn files (`src/turn_files.c`) |
+| [NEGOTIATION_GUIDE.md](NEGOTIATION_GUIDE.md) | Negotiation in plain words (the four choices, prices, End Turn), for the tutorials |
 
 ## Reproducing the remote-player battle tests
 1. Build with `-DCH_REMOTE_BATTLE=ON` and run headless from `build/` with the remote designs (extract `DATA/DEFRP.CRD` from the disc with `tools/research/iso.py` + `ext.py`):
@@ -26,7 +27,10 @@ Savestates survive a rebuild only while the hook list and `SNAPSHOT_TAG` stay th
 3. `python3 tools/research/hotseat.py demo`: A ends its turn; B forms a unit and orders Capture on A's base; End Turn until B takes the base. The log shows `[hotseat]` lines for set-up, each swap and the end. `hotseat.py` also has `state()` (bases, OKEs, units) and `form_and_order()` for other set-ups (Defend = 1 gives a battle).
 
 ## Turn files: simulator test
-`sh tools/research/turnsim/run.sh` (Linux/macOS, needs a C compiler and Python 3; no disc or build needed). It runs `src/turn_files.c`, `src/hotseat.c` and `src/remote_battle.c` on a fake RAM as two players sharing a folder, then checks the logs: a straight game, and one where B quits and catches up. It also plays out the frame-by-frame wait (the hook "calling" VSync until the file arrives) and checks that End Turn gets its registers back afterwards. It ends with "all checks passed".
+`sh tools/research/turnsim/run.sh` (Linux/macOS, needs a C compiler and Python 3; no disc or build needed). It runs `src/turn_files.c`, `src/hotseat.c` and `src/remote_battle.c` on a fake RAM as two players sharing a folder, then checks the logs: a straight game, and one where B quits and catches up. It also plays out the frame-by-frame wait (the hook "calling" VSync until the file arrives) and checks that End Turn gets its registers back afterwards. It ends with "all checks passed". It also checks negotiation (`src/negotiation_sync.c`): the CPU's negotiation never runs, each player keeps their own blueprints, and an R&D bonus goes to the player who paid.
+
+## Negotiation online: two real copies
+`python3 tools/research/negotiation_demo.py` (build with `-DCH_REMOTE_BATTLE=ON`, disc in `disc/`, Node.js for the local relay): A buys a blueprint and B pays towards one through the Negotiation screens; checks each copy sees the other's as Drakken's, the worlds match, research moves on once a round, no CPU spending, and B's restart. Output in `build/research/negotiation/`.
 
 ## Reproducing the turn-file test (two copies, one PC)
 Tested in the real game on 2026-11-23 (Linux, headless): a capture game (B takes A's base: defeat screen on A, victory on B, see `docs/screenshots/turn-files-two-copies-game-over.png`), a battle game (A's defender beats B's attacker on A's device; B gets the result and both copies end in the same state) and a restart (B closed and started again mid-game, caught up with one End Turn). No desyncs.

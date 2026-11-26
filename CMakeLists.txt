@@ -163,11 +163,14 @@ psxrecomp_select_guest_implementation(
     SYMBOLS func_8001CF48 func_80035CD4 func_80035988
             func_8001B8EC func_8001C268 func_8001BCB0 func_8008A2B8
             func_800333F8 func_8008E1E4
+            func_8004BBB8 func_800566F4 func_80049828 func_80049F44
+            func_8004A214 func_80049CA4
     HLE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/remote_battle.c"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/hotseat.c"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/turn_files.c"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/turn_relay.c"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/turn_replay.c"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/negotiation_sync.c"
     REFERENCE_PREFIX ch_remote_lle_
     SNAPSHOT_TAG 0x43485243)
 endif()

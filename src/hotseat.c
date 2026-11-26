@@ -42,9 +42,12 @@
  * copies of the game. At the swap point, instead of swapping, this copy
  * sends the state after its half and loads the opponent's next turn.
  *
- * Known gaps (fine for a local test, to fix for turn files):
- *   - research and negotiation (0x8004BBB8, not mapped yet) run for the
- *     CPU on every End Turn; only the waiting side's funds are protected;
+ * Negotiation and research (negotiation_sync.c): the CPU's negotiation is
+ * off, each side has its own ledger (blueprints bought, investments,
+ * optimizations, goodwill), swapped with the sides, and the companies'
+ * research moves on once a round, on side A's half.
+ *
+ * Known gaps (fine for a local test):
  *   - kills and losses of the waiting side's OKEs are added to the CPU card
  *     records, not to that side's designs;
  *   - this state lives in the module, not in RAM: savestates and save files
@@ -82,6 +85,10 @@ void ch_remote_lle_func_8008A2B8(CPUState *cpu);
 
 /* turn_files.c */
 int ch_turns_active(void);
+int ch_turns_role(void);
+/* negotiation_sync.c */
+void ch_neg_setup(CPUState *cpu);
+void ch_neg_swap(CPUState *cpu);
 void ch_turns_begin(CPUState *cpu);
 int ch_turns_swap_point(CPUState *cpu, int game_over);
 
@@ -107,6 +114,15 @@ int ch_hotseat_active(void)
         if (g_on) fprintf(stderr, "[hotseat] on%s\n", ch_turns_active() ? " (turn files)" : "");
     }
     return g_on;
+}
+
+int ch_hotseat_ready(void) { return g_ready; }
+
+/* Research moves on once a round: on side A's half (player A's copy with
+ * turn files). See negotiation_sync.c. */
+int ch_hotseat_world_half(void)
+{
+    return ch_turns_active() ? ch_turns_role() == 0 : g_side == 0;
 }
 
 /* Turn files switch hot-seat off when the wrong scenario was started. */
@@ -178,6 +194,7 @@ static void setup(CPUState *cpu)
     g_other_base = (uint32_t)first_base_of(cpu, 2);
     g_side = 0;
     g_ready = 1;
+    ch_neg_setup(cpu);
     fprintf(stderr, "[hotseat] set up: %d OKE(s) given to side B, funds %u each\n",
             n, cpu->read_word(GP_FUNDS_PLAYER));
 }
@@ -267,6 +284,8 @@ static void swap_sides(CPUState *cpu)
         wr(cpu, cards + c * CARD_SIZE, g_other_cards[c], CARD_SIZE);
         memcpy(g_other_cards[c], tmp, CARD_SIZE);
     }
+
+    ch_neg_swap(cpu);
 
     const uint32_t cur = cpu->read_word(GP_CUR_BASE);
     uint32_t next = g_other_base;

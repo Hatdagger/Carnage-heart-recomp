@@ -117,7 +117,7 @@ public class TurnCheckJob extends JobService {
         String text = over ? "Open it to see who won."
                            : "Player " + other + " has played (game " + g.code + ", turn " + ((g.latest + 2) / 2) + ").";
         Notification n = new Notification.Builder(ctx, CHANNEL)
-            .setSmallIcon(ctx.getApplicationInfo().icon)   // no R class in this build
+            .setSmallIcon(smallIcon(ctx))
             .setContentTitle(title)
             .setContentText(text)
             .setContentIntent(pi)
@@ -128,5 +128,12 @@ public class TurnCheckJob extends JobService {
         } catch (SecurityException ignored) {
             // Notifications not allowed (Android 13+ permission refused).
         }
+    }
+
+    /** The white status-bar icon (res/drawable/ic_stat_turn.xml). This build has
+     *  no R class, so it is looked up by name; the app icon is the fallback. */
+    static int smallIcon(Context ctx) {
+        int id = ctx.getResources().getIdentifier("ic_stat_turn", "drawable", ctx.getPackageName());
+        return id != 0 ? id : ctx.getApplicationInfo().icon;
     }
 }

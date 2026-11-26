@@ -186,7 +186,7 @@ How it works (`src/turn_files.c`, `src/remote_battle.c`, `src/hotseat.c`, new `s
 Known gaps
 - **Both players need the new build**: an older build refuses version-3 turn files ("update the game"). Games already in progress carry on (the new build reads version 2; replays start with the first version-3 file).
 - Only units, positions and battles are replayed. Production, research and base changes simply appear when the end state is loaded.
-- The replay can't be skipped yet (a button to skip would be a small addition).
+- ~~The replay can't be skipped yet~~ (2026-11-25, session 8, PR #16: Start, Cross, Circle or a click / tap skips the rest of it; the end state is loaded at once. A press during a unit's walk or a battle is noted and acted on after that step, so a battle that has started plays to the end. Real game, `REPLAY_SKIP=1 replay_demo.py`: 9 of 9 replays skipped).
 
 ### Negotiation and research (2026-11-25, session 7, step 6f)
 Branch `negotiation-research`, **PR #15**. The map is in CAMPAIGN_RAM_MAP.md ("Negotiation and research"); a plain-words guide to the four Negotiation choices for the tutorials is in NEGOTIATION_GUIDE.md.
@@ -206,10 +206,26 @@ Branch `negotiation-research`, **PR #15**. The map is in CAMPAIGN_RAM_MAP.md ("N
 - **Real game, two copies, local relay** (new `tools/research/negotiation_demo.py`), through the game's own screens: A bought CP-478FX (Kawashima Corp) on turn 1 and B's copy showed it as the opponent's; B paid 5000 towards Golle 1800C1 (Union Claude) and A's copy showed it as the opponent's payment, with the same 2 turns saved on both copies; over 2 rounds every blueprint in development moved on exactly 2 turns; the waiting side's funds were never touched; both copies had identical worlds throughout; B closed and restarted and its blueprints, payments and goodwill came back from its turn file.
 
 Known gaps
-- The **market stance** (`0x800DF394`, prices +-15% for winning or losing) is worked out on each copy from its own battle counters; not synced. Small price differences between the two players are possible.
+- ~~The **market stance** is worked out on each copy from its own battle counters; not synced~~ (2026-11-25, session 8: the counters travel in the turn files, version 5; see "Market stance" below).
 - A development delay rolled on A's half only shows "delayed" (flag 0x8000) to A, even if B also paid for it.
 - The "reserved for the investor" window (+03 = 0x40) only keeps the CPU from buying; between two players it does nothing (as before, both can buy any blueprint on sale).
 - Not tested: Android (same code), a real window.
+
+### Market stance (2026-11-25, session 8)
+Branch `replay-skip-and-polish`, **PR #16**. The map is in CAMPAIGN_RAM_MAP.md (globals under "Negotiation and research").
+
+**What it is**: `0x800DF394`, -2..+2, picks the price factor (95-115 %; good customers 85-100 %): prices go up for the player who is winning. `0x8004B9F4` works it out at every End Turn (and once when the map opens) from the player's share of the owned bases and the player's kills per battle: `0x800DF398` (enemy units wiped out, counted by the clean-up `0x80035988` for owner-2 units) over `0x800DF39C` (battles, counted just before the battle engine). The battle part only counts after 10 battles.
+
+**Why each copy works it out**: "I am winning" is per player, so each copy working out its own stance is right. The inputs were the problem. Bases come from the turn file, but the two counters were each copy's own count. That only worked while every battle was replayed, so skipping or switching off the replay, a restart from an older save, or a new device gave different prices.
+
+**Built** (`src/turn_files.c`, `src/hotseat.c`):
+- **Turn files are version 5**: 16 bytes at the end: "STC1", battles fought (the same for both players), the receiver's kills, the sender's kills. The sender works them out from the battle records (its half's battles added to what it last received), not from the game's own counting, so they can't drift.
+- **Loading** a turn file (the opponent's, or my own when the map opens) sets `0x800DF39C` and `0x800DF398` and works the stance out again with the same formula as `0x8004B9F4`. So the prices on my turn follow the state just loaded (the game itself would only do it at the next End Turn). Versions 2-4 are still read (the counters stay as the game counted them). **Both players need the new build** (an older build refuses version 5). PR #15's version 4 has not been released, so if both PRs go out together players only update once.
+- **Hot-seat**: each side keeps its own kill counter, swapped with the sides; the battle counter is shared. (Gap: as in the original game, only owner-2 units wiped out are counted, so in hot-seat a side's kills while the other side is playing are not counted.)
+
+**Tested**
+- Simulator: the stand-in battle and clean-up count like the game; new `turnsim/stance_check.py` checks every turn file's counters against its battle records, and the values each copy set on loading, in all cases (straight game, skip with a lethal battle, restarts, own file, relay, new computer).
+- **Real game, two copies, local relay** (`replay_demo.py`, normal and `REPLAY_SKIP=1`): the counters in every turn file matched the battle records, and both copies set them on loading. In one run B won the battle at (9,6): file 7 carried 1 battle and 1 kill for B; A's copy then had "1 battle, my kills 0, theirs 1" and its stance went to -2 after losing its last base. In the skip run, B skipped the replay that held the second battle and still got the right counters.
 
 ### Saves and memory cards: mapped (2026-11-22)
 A campaign save is one 5-block file whose body is a straight copy of the campaign tables in RAM (cards, units, bases, OKEs, globals). No checksum found. A single design is one 1152-byte record at a known offset. See VS_MODE_AND_SAVES.md.
@@ -238,7 +254,7 @@ Branch `online-android`, **PR #9** (on top of v0.1.3 main, which already has PR 
 **Tested on a device (2026-11-24, owner)**: the test APK (signed with the owner's key) on the Lenovo Legion Tab Y700 Gen 2 — the owner reports multiplayer worked. PR #9 merged into main.
 
 Known gaps
-- The notification icon is the app icon (Android shows it as a plain shape in the status bar).
+- ~~The notification icon is the app icon~~ (2026-11-25, session 8, PR #16: a white hex icon, `res/drawable/ic_stat_turn.xml`).
 - If the game is still running in the background and PLAY is pressed for a different online game, Android brings back the running game with its old switches. Closing the game first avoids this.
 
 ## Option A: Live VS over the internet (later)
@@ -260,6 +276,23 @@ PSXRecomp netplay has a `guest_memcard` setting: player 2's own memory card beco
 7. ~~Optional: visual replay of the enemy's turn~~ (done 2026-11-24, session 6, branch `enemy-replay`; battles are fought again from the same seed).
 7b. ~~Negotiation and research: map, stop the CPU's, carry both players' in the turn files~~ (done 2026-11-25, session 7, branch `negotiation-research`).
 8. Later: Options A and B (the card and save layout they need is now mapped).
+
+## Session status (chat B, 2026-11-25, session 8)
+**Done**
+- Branch `replay-skip-and-polish` on top of `negotiation-research`, **PR #16** (base: PR #15's branch; retarget to main after #15 is merged).
+- **Skip the replay**: Start, Cross or Circle, or a click / tap. A press at any time is noted (the game's own pad reads during a unit's walk or a battle, or the port-1 buffer between steps) and acted on between units; the end state is then loaded at once. The status line says "(X, O or Start: skip)". Real game: 9 of 9 replays skipped (`REPLAY_SKIP=1 replay_demo.py`). The first version only checked between steps and missed presses during a walk (3 of 8).
+- **Market stance synced**: its counters mapped (battles `0x800DF39C`, enemy units wiped out `0x800DF398`) and carried in **version-5 turn files**; loading sets them and works the stance out again. Hot-seat keeps each side's kills. Simulator and real two-copy games pass (section "Market stance" above).
+- **Android notification icon**: a white hex-and-unit shape (`android/res/drawable/ic_stat_turn.xml`).
+- **Android test APK** with the replay, negotiation, skip, stance and new icon, signed with the owner's key (devkit release reachable this time).
+- Real-game runs: `replay_demo.py` (battle replayed exactly, no desyncs, game over reached) and `REPLAY_SKIP=1`; simulator all cases.
+
+**Next**
+- Hub: merge PR #15, then PR #16 (retarget it to main). Release note: both players must update (version-5 turn files).
+- Owner: install the test APK on the tablet; check the replay, skipping it (tap or a pad button), negotiation, and the notification icon.
+- Later: Options A (live VS) and B (card sharing).
+
+**Blocked**
+- Nothing.
 
 ## Session status (chat B, 2026-11-25, session 7)
 **Done**

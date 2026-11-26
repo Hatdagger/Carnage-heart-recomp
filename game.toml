@@ -43,6 +43,21 @@ overlay_cache = true
 renderer = "opengl"
 aspect_ratio = "4:3"
 
+# Fidelity "Clean" baseline (branch fidelity-clean, see project doc "Fidelity Plan").
+# Players can still pick Faithful in the launcher's Settings.
+internal_resolution = "display"   # match the monitor
+match_display_max_lines = 2160
+supersample = 1.5
+geometry_correction = true        # PGXP: no vertex wobble
+perspective_texturing = true      # PGXP: no texture warping
+pgxp_depth_buffer = true          # real depth buffer for 3D polygons
+pgxp_preserve_projection = true
+pgxp_color_correction = true
+texture_filtering = "nearest"     # keep the original pixel look
+texture_lod = "mipmap"
+anisotropic_filtering = 16
+dithering = "off"
+
 [controller]
 default_mode = "digital"
 

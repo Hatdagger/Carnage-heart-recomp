@@ -16,6 +16,8 @@
  *   run/wait ms per second the thread ran / sat ready waiting for a core
  *            (/proc/self/task/<tid>/schedstat)
  *   thermal= Android thermal status 0 (none) .. 6 (shutdown), API 30+
+ *   idle=    idle-loop skips per second (0 with SPEED BOOST off or when the
+ *            game has no wait loop the runtime can skip on this screen)
  *   guest=   last dispatched guest function, sampled 500x/s, top 3 with share
  * PSX_ANDROID_WATCH=0 turns it off. Diagnostic only: reads, never changes
  * anything the game sees. */
@@ -31,6 +33,7 @@
 #include <unistd.h>
 
 extern uint32_t g_debug_current_func_addr;
+extern uint64_t g_idle_skip_count; /* runtime psx_cycles.c: idle-loop skips so far */
 
 static pid_t s_tid;
 
@@ -114,7 +117,7 @@ static void *watch_main(void *unused)
     unsigned fn_hits[NFUNC];
     unsigned fn_used = 0, fn_other = 0, fn_total = 0, cpu_total = 0;
     memset(cpu_hits, 0, sizeof cpu_hits);
-    uint64_t last_run = 0, last_wait = 0;
+    uint64_t last_run = 0, last_wait = 0, last_idle = g_idle_skip_count;
     thread_schedstat(&last_run, &last_wait);
     uint64_t window_start = now_ns();
     unsigned tick = 0;
@@ -189,8 +192,11 @@ static void *watch_main(void *unused)
             fn_hits[best] = 0;
         }
 
-        printf("android watch: cpu=%s mhz=%s %s thermal=%d guest=%s\n",
-               cpus[0] ? cpus : "?", mhz, rw, thermal, guest[0] ? guest : "?");
+        const uint64_t idle = g_idle_skip_count;
+        printf("android watch: cpu=%s mhz=%s %s thermal=%d idle=%.0f/s guest=%s\n",
+               cpus[0] ? cpus : "?", mhz, rw, thermal,
+               (double)(idle - last_idle) / secs, guest[0] ? guest : "?");
+        last_idle = idle;
 
         memset(cpu_hits, 0, sizeof cpu_hits);
         fn_used = fn_other = fn_total = cpu_total = 0;

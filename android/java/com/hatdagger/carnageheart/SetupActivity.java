@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ContentResolver;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -49,6 +50,7 @@ public class SetupActivity extends Activity {
     private Button playSoftButton;
     private Button onlineButton;
     private Button scaleButton;
+    private Button boostButton;
     private Button shareButton;
     private Button saveLogButton;
     private boolean busy;
@@ -146,6 +148,21 @@ public class SetupActivity extends Activity {
         sc.topMargin = dp(8);
         root.addView(scaleButton, sc);
         scaleButton.setVisibility(View.GONE);
+
+        // Speed boost (idle skip + game thread on the fastest core), for
+        // slower devices. On by default; OFF is there to compare.
+        boostButton = new Button(this);
+        boostButton.setTextSize(14);
+        updateBoostButton();
+        boostButton.setOnClickListener(v -> {
+            SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+            p.edit().putBoolean(PREF_BOOST, !p.getBoolean(PREF_BOOST, true)).apply();
+            updateBoostButton();
+        });
+        LinearLayout.LayoutParams bo = wrap();
+        bo.topMargin = dp(8);
+        root.addView(boostButton, bo);
+        boostButton.setVisibility(View.GONE);
 
         // The CPU renderer of test APK 5 (native resolution), in case the
         // GPU renderer misbehaves on a device.
@@ -383,6 +400,7 @@ public class SetupActivity extends Activity {
         playButton.setVisibility(View.VISIBLE);
         playSoftButton.setVisibility(View.VISIBLE);
         scaleButton.setVisibility(View.VISIBLE);
+        boostButton.setVisibility(View.VISIBLE);
         onlineButton.setVisibility(View.VISIBLE);
         if (!Relay.load(this).isEmpty()) TurnCheckJob.schedule(this);
         File log = logFile();
@@ -477,6 +495,12 @@ public class SetupActivity extends Activity {
 
     static final String PREFS = "settings";
     static final String PREF_SCALE = "gpu_scale";
+    static final String PREF_BOOST = "speed_boost";
+
+    private void updateBoostButton() {
+        boolean on = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_BOOST, true);
+        boostButton.setText("SPEED BOOST: " + (on ? "ON" : "OFF") + " - tap to change");
+    }
 
     private String scale() {
         String s = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_SCALE, "3x");

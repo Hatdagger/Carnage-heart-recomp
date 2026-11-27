@@ -24,6 +24,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "ch_android_boost.h"
+
 int ch_android_real_main(int argc, char *argv[]);
 void ch_android_watch_start(void);
 void ch_android_relay_init(void);
@@ -218,6 +220,18 @@ int SDL_main(int argc, char *argv[])
            gpu ? "OpenGL ES (" : "software (native resolution)",
            gpu ? scale : "",
            gpu ? " internal resolution, render thread on, vsync off / pacer only)" : "");
+
+    /* Speed boost (start screen: SPEED BOOST, on by default), for devices
+     * slower than the Y700 Gen 2 such as the Retroid Pocket 5:
+     *   - idle skip: the runtime jumps over the game's "wait for the next
+     *     frame" loops instead of running them (loops that store nothing
+     *     only; the game sees the same timing). The online campaign trades
+     *     turn files, not netplay, so it is unaffected.
+     *   - the game thread is kept on the fastest core (ch_android_boost.c). */
+    setenv("PSX_IDLE_SKIP", ch_android_boost_enabled() ? "1" : "0", 1);
+    printf("Carnage Heart (Android): speed boost %s\n",
+           ch_android_boost_enabled() ? "on (idle skip + fastest core)" : "off");
+    ch_android_boost_start();
 
     /* Test 8: cores, clock, run/wait, thermal and hot guest code every 2 s
      * (ch_android_watch.c), to explain the 40 fps still-screen slowdown. */

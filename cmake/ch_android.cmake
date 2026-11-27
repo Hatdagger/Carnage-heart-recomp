@@ -60,6 +60,7 @@ function(ch_android_finish_target target)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_main.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_perf.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_watch.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_boost.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_relay.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_ucontext_aarch64.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/android/ch_android_gl_shims.c"

@@ -28,6 +28,7 @@ public class GameActivity extends SDLActivity {
     @Override
     protected void onCreate(Bundle saved) {
         setOnlineSwitches();
+        setSpeedBoost();
         running = true;
         super.onCreate(saved);
     }
@@ -59,6 +60,16 @@ public class GameActivity extends SDLActivity {
             Os.setenv("CH_TURN_GAME", g.code, true);
             Os.setenv("CH_TURN_KEY", g.key, true);
             Os.setenv("CH_TURN_ROLE", String.valueOf(g.role), true);
+        } catch (ErrnoException ignored) { }
+    }
+
+    /** SPEED BOOST on the start screen (default on): read by
+     *  src/android/ch_android_boost.c and ch_android_main.c with getenv(). */
+    private void setSpeedBoost() {
+        boolean on = getSharedPreferences(SetupActivity.PREFS, MODE_PRIVATE)
+            .getBoolean(SetupActivity.PREF_BOOST, true);
+        try {
+            Os.setenv("CH_ANDROID_BOOST", on ? "1" : "0", true);
         } catch (ErrnoException ignored) { }
     }
 

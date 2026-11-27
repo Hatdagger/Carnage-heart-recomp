@@ -24,11 +24,11 @@
 #define _GNU_SOURCE
 #include <dirent.h>
 #include <pthread.h>
-#include <sched.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
@@ -36,6 +36,22 @@
 #include "ch_android_boost.h"
 
 enum { BOOST_MAX_CPU = 64 };
+
+/* Core lists as one bit per core, through the kernel calls directly: Bionic
+ * only declares cpu_set_t when _GNU_SOURCE is seen before its first header,
+ * which the build's forced compatibility header gets ahead of. */
+typedef uint64_t coremask;
+
+static int get_cores(pid_t tid, coremask *m)
+{
+    *m = 0;
+    return syscall(__NR_sched_getaffinity, tid, sizeof *m, m) > 0 ? 0 : -1;
+}
+
+static int set_cores(pid_t tid, coremask m)
+{
+    return syscall(__NR_sched_setaffinity, tid, sizeof m, &m) == 0 ? 0 : -1;
+}
 
 int ch_boost_pick_fast(const long *max_khz, const unsigned char *allowed, int n,
                        unsigned char *fast)
@@ -64,7 +80,7 @@ static pid_t s_game_tid;
 /* One watcher per game start: an older one stops when the game is started
  * again in the same app process. */
 static volatile int s_run;
-static cpu_set_t s_all, s_fast;
+static coremask s_all, s_fast;
 static char s_fast_text[96];
 
 static long cpu_max_khz(int cpu)
@@ -105,11 +121,9 @@ static int release_helpers(void)
     while ((e = readdir(d)) != NULL) {
         int tid = atoi(e->d_name);
         if (tid <= 0 || tid == (int)s_game_tid) continue;
-        cpu_set_t m;
-        CPU_ZERO(&m);
-        if (sched_getaffinity(tid, sizeof m, &m) != 0) continue;
-        if (CPU_EQUAL(&m, &s_fast) && sched_setaffinity(tid, sizeof s_all, &s_all) == 0)
-            changed++;
+        coremask m;
+        if (get_cores(tid, &m) != 0) continue;
+        if (m == s_fast && set_cores(tid, s_all) == 0) changed++;
     }
     closedir(d);
     return changed;
@@ -121,7 +135,7 @@ static void *boost_main(void *unused)
     const int run = s_run;
     sleep(3);
     if (run != s_run) return NULL;
-    if (sched_setaffinity(s_game_tid, sizeof s_fast, &s_fast) != 0) {
+    if (set_cores(s_game_tid, s_fast) != 0) {
         printf("android boost: could not pin the game thread to core(s) %s; left as it was\n",
                s_fast_text);
         return NULL;
@@ -144,7 +158,7 @@ static void *boost_main(void *unused)
         last_wait = wait;
         crowded = waited_ms_per_s > 100 ? crowded + 1 : 0;
         if (crowded >= 3) {
-            sched_setaffinity(s_game_tid, sizeof s_all, &s_all);
+            set_cores(s_game_tid, s_all);
             release_helpers();
             printf("android boost: the fast core is busy (game thread waited %llu ms/s); pin removed\n",
                    (unsigned long long)waited_ms_per_s);
@@ -168,17 +182,16 @@ void ch_android_boost_start(void)
         printf("android boost: off (SPEED BOOST: OFF)\n");
         return;
     }
-    s_game_tid = gettid();
-    CPU_ZERO(&s_all);
-    CPU_ZERO(&s_fast);
-    if (sched_getaffinity(0, sizeof s_all, &s_all) != 0) {
+    s_game_tid = (pid_t)syscall(__NR_gettid);
+    s_fast = 0;
+    if (get_cores(0, &s_all) != 0) {
         printf("android boost: cannot read the allowed cores; not pinning\n");
         return;
     }
     long khz[BOOST_MAX_CPU];
     unsigned char allowed[BOOST_MAX_CPU], fast[BOOST_MAX_CPU];
     for (int c = 0; c < BOOST_MAX_CPU; c++) {
-        allowed[c] = CPU_ISSET(c, &s_all) ? 1 : 0;
+        allowed[c] = (s_all >> c) & 1 ? 1 : 0;
         khz[c] = allowed[c] ? cpu_max_khz(c) : 0;
     }
     if (!ch_boost_pick_fast(khz, allowed, BOOST_MAX_CPU, fast)) {
@@ -188,7 +201,7 @@ void ch_android_boost_start(void)
     s_fast_text[0] = '\0';
     for (int c = 0; c < BOOST_MAX_CPU; c++) {
         if (!fast[c]) continue;
-        CPU_SET(c, &s_fast);
+        s_fast |= (coremask)1 << c;
         char one[32];
         snprintf(one, sizeof one, "%s%d (%ld MHz)", s_fast_text[0] ? ", " : "", c, khz[c] / 1000);
         strncat(s_fast_text, one, sizeof s_fast_text - strlen(s_fast_text) - 1);
